@@ -1,17 +1,19 @@
 package app.anilab.local.di
 
+import app.anilab.local.data.backup.JsonBackupRepository
 import app.anilab.local.data.network.AndroidConnectivityRepository
 import app.anilab.local.data.prefs.DataStoreSettingsRepository
 import app.anilab.local.data.repo.RoomBrowseRepository
+import app.anilab.local.data.repo.RoomCategoryMembership
 import app.anilab.local.data.repo.RoomDownloadRepository
 import app.anilab.local.data.repo.RoomExtensionRepository
 import app.anilab.local.data.repo.RoomHistoryRepository
 import app.anilab.local.data.repo.RoomLibraryRepository
 import app.anilab.local.data.repo.RoomProgressRepository
 import app.anilab.local.data.repo.RoomRepoRepository
-import app.anilab.local.data.backup.JsonBackupRepository
 import app.anilab.local.domain.repository.BackupRepository
 import app.anilab.local.domain.repository.BrowseRepository
+import app.anilab.local.domain.repository.CategoryMembership
 import app.anilab.local.domain.repository.ConnectivityRepository
 import app.anilab.local.domain.repository.DownloadRepository
 import app.anilab.local.domain.repository.ExtensionRepository
@@ -68,4 +70,8 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun connectivityRepository(impl: AndroidConnectivityRepository): ConnectivityRepository
+
+    @Binds
+    @Singleton
+    abstract fun categoryMembership(impl: RoomCategoryMembership): CategoryMembership
 }

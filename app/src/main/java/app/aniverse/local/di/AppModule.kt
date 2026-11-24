@@ -35,7 +35,7 @@ object AppModule {
             // Only idempotent GETs are retried; the client never retries unsafe methods.
             chain.proceed(
                 chain.request().newBuilder()
-                    .header("User-Agent", "AniVerseLocal/1.0")
+                    .header("User-Agent", "AniVerse/1.0")
                     .build(),
             )
         }

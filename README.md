@@ -1,4 +1,4 @@
-# AniLab Local
+# AniVerse
 
 A local-first Android anime client built with Kotlin and Jetpack Compose. There is no backend, no account and no bundled content: every series you see comes from a third-party extension that you install yourself from a repository URL you paste in.
 
@@ -47,10 +47,10 @@ Layering is `ui -> domain -> data`. Network DTOs never leave `data/`; the UI onl
 
 ## Extension model
 
-Extensions are ordinary APKs, normally built with the Aniyomi extension toolchain, that depend on `source-api`. The host loads them in an isolated `:extension` process through a `ContentProvider` (`app.anilab.source.runtime.ExtensionProvider`, authority `${applicationId}.extensions`), talking to it with a small length-prefixed JSON protocol.
+Extensions are ordinary APKs, normally built with the Aniyomi extension toolchain, that depend on `source-api`. The host loads them in an isolated `:extension` process through a `ContentProvider` (`app.aniverse.source.runtime.ExtensionProvider`, authority `${applicationId}.extensions`), talking to it with a small length-prefixed JSON protocol.
 
-- API version: `app.anilab.source.api.EXTENSION_API_VERSION` (currently `1`); mismatched extensions are refused with a readable error
-- Entry point: extensions declare the action `app.anilab.source.api.EXTENSION`; the app discovers them through a `<queries>` entry, never `QUERY_ALL_PACKAGES`
+- API version: `app.aniverse.source.api.EXTENSION_API_VERSION` (currently `1`); mismatched extensions are refused with a readable error
+- Entry point: extensions declare the action `app.aniverse.source.api.EXTENSION`; the app discovers them through a `<queries>` entry, never `QUERY_ALL_PACKAGES`
 - Each call has a 20 second timeout; a source that fails three times opens a circuit breaker for ten minutes, and an extension is disabled after five recorded failures
 - Filters, popular/latest/search, details, episodes and video resolution all cross the same bridge
 

@@ -1,11 +1,11 @@
-# AniLab Local release rules.
+# AniVerse release rules.
 
 # Extension API surface is loaded from installed extension APKs inside this process, so its
 # members are only referenced reflectively / through the child class loader.
--keep class app.anilab.source.api.** { *; }
--keep interface app.anilab.source.api.** { *; }
--keep class app.anilab.source.runtime.ExtensionHost { *; }
--keep class app.anilab.source.runtime.ExtensionProvider { *; }
+-keep class app.aniverse.source.api.** { *; }
+-keep interface app.aniverse.source.api.** { *; }
+-keep class app.aniverse.source.runtime.ExtensionHost { *; }
+-keep class app.aniverse.source.runtime.ExtensionProvider { *; }
 
 # Room generates implementations by name.
 -keep class * extends androidx.room.RoomDatabase
@@ -20,11 +20,11 @@
 -keepclasseswithmembers class kotlinx.serialization.json.** {
     kotlinx.serialization.KSerializer serializer(...);
 }
--keep,includedescriptorclasses class app.anilab.**$$serializer { *; }
--keepclassmembers class app.anilab.** {
+-keep,includedescriptorclasses class app.aniverse.**$$serializer { *; }
+-keepclassmembers class app.aniverse.** {
     *** Companion;
 }
--keepclasseswithmembers class app.anilab.** {
+-keepclasseswithmembers class app.aniverse.** {
     kotlinx.serialization.KSerializer serializer(...);
 }
 
@@ -37,7 +37,7 @@
 -dontwarn javax.annotation.**
 
 # Keep the install result receiver referenced only from a PendingIntent.
--keep class app.anilab.local.data.extensions.InstallResultReceiver { *; }
+-keep class app.aniverse.local.data.extensions.InstallResultReceiver { *; }
 
 # No logging in release: strip android.util.Log calls entirely.
 -assumenosideeffects class android.util.Log {

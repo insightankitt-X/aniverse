@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "app.anilab.source.api"
+    namespace = "app.aniverse.source.api"
     compileSdk = 35
 
     defaultConfig {

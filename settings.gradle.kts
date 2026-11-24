@@ -14,7 +14,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "AniLabLocal"
+rootProject.name = "AniVerse"
 
 include(":app")
 include(":source-api")

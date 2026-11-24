@@ -8,11 +8,11 @@ plugins {
 }
 
 android {
-    namespace = "app.anilab.local"
+    namespace = "app.aniverse.local"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "app.anilab.local"
+        applicationId = "app.aniverse.local"
         minSdk = 26
         targetSdk = 35
         versionCode = 1

@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "app.anilab.source.runtime"
+    namespace = "app.aniverse.source.runtime"
     compileSdk = 35
 
     defaultConfig {

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">AniLab Local</string>
+    <string name="app_name">AniVerse</string>
 
     <string name="channel_downloads">Downloads</string>
     <string name="channel_downloads_description">Episode download progress and results</string>
@@ -17,6 +17,6 @@
     <string name="notification_updates_title">New episodes available</string>
     <string name="notification_updates_body">%1$d new episode(s) in your library</string>
 
-    <string name="install_result_action">app.anilab.local.action.INSTALL_RESULT</string>
+    <string name="install_result_action">app.aniverse.local.action.INSTALL_RESULT</string>
     <string name="offline_message">You\'re offline</string>
 </resources>

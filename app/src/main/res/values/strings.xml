@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AniLab Local</string>
+
+    <string name="channel_downloads">Downloads</string>
+    <string name="channel_downloads_description">Episode download progress and results</string>
+    <string name="channel_library_updates">Library updates</string>
+    <string name="channel_library_updates_description">New episodes for series in your library</string>
+
+    <string name="download_channel_id">downloads</string>
+    <string name="updates_channel_id">library_updates</string>
+
+    <string name="notification_download_title">Downloading %1$s</string>
+    <string name="notification_download_progress">%1$d%%</string>
+    <string name="notification_download_done">Download complete</string>
+    <string name="notification_download_failed">Download failed</string>
+    <string name="notification_updates_title">New episodes available</string>
+    <string name="notification_updates_body">%1$d new episode(s) in your library</string>
+
+    <string name="install_result_action">app.anilab.local.action.INSTALL_RESULT</string>
+    <string name="offline_message">You\'re offline</string>
+</resources>

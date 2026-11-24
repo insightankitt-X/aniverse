@@ -120,11 +120,11 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun import(mode: ImportMode) {
+    fun runImport(mode: ImportMode) {
         val uri = _ui.value.previewUri ?: return
         viewModelScope.launch {
             _ui.update { it.copy(busy = true, preview = null) }
-            val result = backupRepository.import(uri, mode)
+            val result = backupRepository.`import`(uri, mode)
             _ui.update {
                 it.copy(
                     busy = false,
@@ -158,7 +158,7 @@ class SettingsViewModel @Inject constructor(
     fun clearUpdates() {
         viewModelScope.launch {
             libraryRepository.clearUpdates()
-            _ui.update { it.copy(message = "Update latch cleared") }
+            _ui.update { it.copy(message = "Update list cleared") }
         }
     }
 }
@@ -284,11 +284,21 @@ fun SettingsScreen(
                     label = "Quality",
                     options = listOf(
                         PlayerQualityMode.AUTO to "Automatic",
-                        PlayerQualityMode.MANUAL to "Preferred (${settings.playerPreferredQuality ?: "pick in player"})",
+                        PlayerQualityMode.MANUAL to "Preferred",
                     ),
                     selected = settings.playerQualityMode,
                     onSelect = { mode -> viewModel.update { it.copy(playerQualityMode = mode) } },
                 )
+            }
+            if (settings.playerQualityMode == PlayerQualityMode.MANUAL) {
+                item {
+                    Text(
+                        "Preferred quality: ${settings.playerPreferredQuality ?: "not chosen yet - pick one in the player"}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    )
+                }
             }
             item {
                 ChipRow(
@@ -325,7 +335,7 @@ fun SettingsScreen(
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                     Text("Storage folder", style = MaterialTheme.typography.bodyLarge)
                     Text(
-                        settings.downloadTreeUri?.let { "Custom folder selected" } ?: "App storage (no folder chosen)",
+                        if (settings.downloadTreeUri != null) "Custom folder selected" else "App storage (no folder chosen)",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -357,12 +367,8 @@ fun SettingsScreen(
 
             item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
             item { SectionHeader("Extensions", Modifier.padding(horizontal = 16.dp)) }
-            item {
-                ActionRow(title = "Manage extensions", subtitle = "Install, update or disable sources", onClick = onOpenExtensions)
-            }
-            item {
-                ActionRow(title = "Repositories", subtitle = "Add, trust or refresh extension indexes", onClick = onOpenRepositories)
-            }
+            item { ActionRow("Manage extensions", "Install, update or disable sources", onOpenExtensions) }
+            item { ActionRow("Repositories", "Add, trust or refresh extension indexes", onOpenRepositories) }
 
             item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
             item { SectionHeader("Backup", Modifier.padding(horizontal = 16.dp)) }
@@ -391,10 +397,10 @@ fun SettingsScreen(
             item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
             item { SectionHeader("Data", Modifier.padding(horizontal = 16.dp)) }
             item {
-                ActionRow(title = "Clear watch history", subtitle = "Keeps your library and progress", onClick = { confirmClearHistory = true })
+                ActionRow("Clear watch history", "Keeps your library and progress", { confirmClearHistory = true })
             }
             item {
-                ActionRow(title = "Clear update list", subtitle = "Marks every new episode as seen", onClick = viewModel::clearUpdates)
+                ActionRow("Clear update list", "Marks every new episode as seen", viewModel::clearUpdates)
             }
 
             item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
@@ -433,8 +439,8 @@ fun SettingsScreen(
             },
             confirmButton = {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { viewModel.import(ImportMode.REPLACE) }) { Text("Replace") }
-                    Button(onClick = { viewModel.import(ImportMode.MERGE) }) { Text("Merge") }
+                    TextButton(onClick = { viewModel.runImport(ImportMode.REPLACE) }) { Text("Replace") }
+                    Button(onClick = { viewModel.runImport(ImportMode.MERGE) }) { Text("Merge") }
                 }
             },
             dismissButton = { TextButton(onClick = viewModel::dismissPreview) { Text("Cancel") } },
@@ -460,23 +466,6 @@ fun SettingsScreen(
             },
             dismissButton = { TextButton(onClick = { confirmClearHistory = false }) { Text("Cancel") } },
         )
-    }
-}
-
-@Composable
-private fun ChipRow(label: String, options: List<Pair<*, String>>, selected: Any?, onSelect: (Any?) -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Text(label, style = MaterialTheme.typography.bodyLarge)
-        Spacer(Modifier.height(6.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            options.forEach { (value, text) ->
-                FilterChip(
-                    selected = selected == value,
-                    onClick = { onSelect(value) },
-                    label = { Text(text) },
-                )
-            }
-        }
     }
 }
 

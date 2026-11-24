@@ -50,10 +50,25 @@ private val DarkColors = darkColorScheme(
     onError = Color(0xFF690005),
 )
 
-private val PureBlackColors = DarkColors.copy(
+/** Dark scheme with true black surfaces, used when the user asks for pure black. */
+private val PureBlackColors = darkColorScheme(
+    primary = Indigo80,
+    onPrimary = Color(0xFF221C6B),
+    primaryContainer = Color(0xFF3A3494),
+    onPrimaryContainer = Color(0xFFE4E0FF),
+    secondary = Violet80,
+    onSecondary = Color(0xFF351B58),
+    secondaryContainer = Color(0xFF4C2B77),
+    onSecondaryContainer = Color(0xFFF1E4FF),
     background = Color.Black,
+    onBackground = Color(0xFFE8E4F2),
     surface = Color.Black,
+    onSurface = Color(0xFFE8E4F2),
     surfaceVariant = Color(0xFF121212),
+    onSurfaceVariant = Color(0xFFC9C4D8),
+    outline = Color(0xFF6E6A7B),
+    error = Color(0xFFFFB4AB),
+    onError = Color(0xFF690005),
 )
 
 private val LightColors = lightColorScheme(

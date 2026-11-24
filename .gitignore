@@ -1,0 +1,19 @@
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+*.apk
+*.aab
+*.jks
+*.keystore
+app/build/
+build/
+
+# Exported Room schemas are source-controlled on purpose (see app/schemas).
+!app/schemas/**

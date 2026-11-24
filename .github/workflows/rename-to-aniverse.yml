@@ -1,0 +1,56 @@
+name: Rename to AniVerse
+
+on:
+  push:
+    paths:
+      - .github/workflows/rename-to-aniverse.yml
+
+permissions:
+  contents: write
+
+jobs:
+  rename:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rename brand, packages and files
+        run: |
+          set -euo pipefail
+          git config user.name "aniverse-rename"
+          git config user.email "aniverse-rename@users.noreply.github.com"
+
+          while IFS= read -r f; do
+            sed -i \
+              -e 's/AniLab Local/AniVerse/g' \
+              -e 's/ANILAB/ANIVERSE/g' \
+              -e 's/AniLab/AniVerse/g' \
+              -e 's/Anilab/AniVerse/g' \
+              -e 's/anilab/aniverse/g' \
+              "$f"
+          done < <(grep -rIl --exclude-dir=.git --exclude-dir=.github -iE 'anilab' . || true)
+
+          for base in \
+            app/src/main/java \
+            app/src/test/java \
+            app/src/androidTest/java \
+            source-api/src/main/java \
+            source-runtime/src/main/java; do
+            if [ -d "$base/app/anilab" ]; then
+              git mv "$base/app/anilab" "$base/app/aniverse"
+            fi
+          done
+
+          while IFS= read -r from; do
+            to="${from/AniLab/AniVerse}"
+            git mv "$from" "$to"
+          done < <(find app source-api source-runtime -type f -name '*AniLab*')
+
+          if grep -q 'rootProject.name = "AniVerseLocal"' settings.gradle.kts; then
+            sed -i 's/rootProject.name = "AniVerseLocal"/rootProject.name = "AniVerse"/' settings.gradle.kts
+          fi
+
+          git rm --quiet .github/workflows/rename-to-aniverse.yml
+          git add -A
+          git commit -m "Rename app, packages and extension API to AniVerse"
+          git push

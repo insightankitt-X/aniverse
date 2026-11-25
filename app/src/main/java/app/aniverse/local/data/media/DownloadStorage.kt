@@ -105,9 +105,9 @@ class DownloadStorage @Inject constructor(
     }
 
     fun locationLabel(): String {
-        val uri = runCatching { settings.current().downloadTreeUri }.getOrNull()
-        return uri ?: (context.getExternalFilesDir(Environment.DIRECTORY_MOVIES) ?: context.filesDir).absolutePath
-    }
+    return (context.getExternalFilesDir(Environment.DIRECTORY_MOVIES)
+        ?: context.filesDir).absolutePath
+}
 
     private suspend fun treeRoot(): DocumentFile? {
         val uri = runCatching { settings.current().downloadTreeUri }.getOrNull() ?: return null

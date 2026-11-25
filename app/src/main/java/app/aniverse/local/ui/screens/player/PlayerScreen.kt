@@ -312,7 +312,7 @@ fun PlayerScreen(
                                     .setMimeType(mimeTypeFor(subtitle.url))
                                     .setLanguage(subtitle.lang)
                                     .setLabel(subtitle.label)
-                                    .setSelectionFlags(if (subtitle.embedded) MediaItem.SELECTION_FLAG_DEFAULT else 0)
+                                    .setSelectionFlags(if (subtitle.embedded) C.SELECTION_FLAG_DEFAULT else 0)
                                     .build()
                             },
                         )

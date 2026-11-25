@@ -1,5 +1,6 @@
 package app.aniverse.local.data.repo
 
+import app.aniverse.local.data.toAvailable
 import app.aniverse.local.data.db.ExtensionDao
 import app.aniverse.local.data.db.RepoDao
 import app.aniverse.local.data.db.RepoEntity

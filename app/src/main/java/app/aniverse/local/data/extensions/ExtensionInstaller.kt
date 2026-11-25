@@ -1,5 +1,8 @@
 package app.aniverse.local.data.extensions
 
+import android.content.pm.PackageInfo
+import java.io.FileOutputStream
+
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -69,7 +72,7 @@ class ExtensionInstaller @Inject constructor(
             val appending = response.code() == 206 && resumeFrom > 0L
             val alreadyThere = if (appending) resumeFrom else 0L
             body.use { stream ->
-                part.outputStream(append = appending).use { output ->
+                FileOutputStream(part, appending).use { output ->
                     val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
                     var written = alreadyThere
                     val total = stream.contentLength().let { if (it > 0) it + alreadyThere else -1L }

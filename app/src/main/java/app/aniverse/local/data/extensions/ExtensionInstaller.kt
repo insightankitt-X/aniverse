@@ -125,7 +125,7 @@ class ExtensionInstaller @Inject constructor(
         val installer = context.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
             setAppPackageName(pkg)
-            setInstallLocation(PackageInstaller.SessionParams.INSTALL_LOCATION_AUTO)
+            setInstallLocation(PackageInfo.INSTALL_LOCATION_AUTO)
         }
         val sessionId = try {
             installer.createSession(params)

@@ -179,7 +179,7 @@ class RoomExtensionRepository @Inject constructor(
         val untrustedUpdates = extensionDao.updatable().filter { extension ->
             trustedUpdates.none { it.pkg == extension.pkg }
         }
-        val skipped = untrustedUpdates.map { extension ->
+        val skipped = untrustedUpdates.mapTo(mutableListOf()) { extension ->
             UpdateFailureItem(extension.pkg, extension.name, "Repository is not trusted, so it is updated manually")
         }
         val updated = mutableListOf<String>()

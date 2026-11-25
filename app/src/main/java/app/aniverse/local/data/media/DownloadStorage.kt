@@ -1,5 +1,6 @@
 package app.aniverse.local.data.media
 
+import java.io.FileOutputStream
 import android.content.Context
 import android.net.Uri
 import android.os.Environment
@@ -33,7 +34,7 @@ class DownloadStorage @Inject constructor(
             if (document != null) {
                 context.contentResolver.openOutputStream(document.uri, if (append) "wa" else "wt")
             } else {
-                file?.outputStream(append = append)
+                file?.let { FileOutputStream(it, append) }
             }
         } catch (e: Exception) {
             null

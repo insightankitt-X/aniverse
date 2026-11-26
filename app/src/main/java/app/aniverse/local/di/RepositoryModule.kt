@@ -9,6 +9,7 @@ import app.aniverse.local.data.repo.RoomDownloadRepository
 import app.aniverse.local.data.repo.RoomExtensionRepository
 import app.aniverse.local.data.repo.RoomHistoryRepository
 import app.aniverse.local.data.repo.RoomLibraryRepository
+import app.aniverse.local.data.repo.RoomPlayerSource
 import app.aniverse.local.data.repo.RoomProgressRepository
 import app.aniverse.local.data.repo.RoomRepoRepository
 import app.aniverse.local.domain.repository.BackupRepository
@@ -19,6 +20,7 @@ import app.aniverse.local.domain.repository.DownloadRepository
 import app.aniverse.local.domain.repository.ExtensionRepository
 import app.aniverse.local.domain.repository.HistoryRepository
 import app.aniverse.local.domain.repository.LibraryRepository
+import app.aniverse.local.domain.repository.PlayerSource
 import app.aniverse.local.domain.repository.ProgressRepository
 import app.aniverse.local.domain.repository.RepoRepository
 import app.aniverse.local.domain.repository.SettingsRepository
@@ -58,6 +60,10 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun downloadRepository(impl: RoomDownloadRepository): DownloadRepository
+
+    @Binds
+    @Singleton
+    abstract fun playerSource(impl: RoomPlayerSource): PlayerSource
 
     @Binds
     @Singleton

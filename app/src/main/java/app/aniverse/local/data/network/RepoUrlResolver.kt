@@ -19,6 +19,9 @@ sealed interface RepoUrlResolution {
 object RepoUrlResolver {
     const val INDEX_FILE = "index.min.json"
 
+    /** Folder Aniyomi-style repositories publish their APKs in. */
+    const val APK_FOLDER = "apk"
+
     fun resolve(input: String): RepoUrlResolution {
         val trimmed = input.trim()
         if (trimmed.isEmpty()) return RepoUrlResolution.Empty
@@ -59,8 +62,14 @@ object RepoUrlResolver {
         }
     }
 
-    /** Resolves an index-relative apk/icon path against the index URL's folder. */
-    fun resolveFile(indexUrl: String, reference: String): String? {
+    /**
+     * Resolves an index-relative apk/icon path against the index URL's folder.
+     *
+     * Aniyomi-style repositories (Keiyoushi, Yuzono, ...) list bare file names in the index while
+     * the files themselves live in an `apk/` or `icon/` folder next to it. [bareFolder] supplies
+     * that folder for bare names; it is ignored when the reference already contains a path.
+     */
+    fun resolveFile(indexUrl: String, reference: String, bareFolder: String? = null): String? {
         val trimmed = reference.trim()
         if (trimmed.isEmpty()) return null
         if (trimmed.startsWith("https://", ignoreCase = true) || trimmed.startsWith("http://", ignoreCase = true)) {
@@ -68,6 +77,28 @@ object RepoUrlResolver {
         }
         val base = parentUrl(indexUrl)
         val cleaned = trimmed.removePrefix("./").removePrefix("/")
-        return "$base/$cleaned"
+        val path = if (bareFolder != null && !cleaned.contains('/')) "$bareFolder/$cleaned" else cleaned
+        return "$base/$path"
+    }
+
+    /**
+     * The same file in the other repository layout: `repo/apk/x.apk` <-> `repo/x.apk`.
+     * Used as a one-shot retry when the repository disagrees with the index.
+     */
+    fun alternateFileLayout(url: String): String? {
+        val marker = "/$APK_FOLDER/"
+        val base = url.substringBefore('?').substringBefore('#')
+        val query = if (url.contains('?')) "?" + url.substringAfter('?') else ""
+        return when {
+            base.contains(marker) -> base.replaceFirst(marker, "/") + query
+            else -> {
+                val slash = base.lastIndexOf('/')
+                if (slash <= "https://".length) {
+                    null
+                } else {
+                    base.substring(0, slash) + marker + base.substring(slash + 1) + query
+                }
+            }
+        }
     }
 }

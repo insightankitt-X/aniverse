@@ -12,9 +12,12 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!--
-      Package visibility: extension APKs declare this action themselves, which lets the app
-      query the packages it installed without the broad QUERY_ALL_PACKAGES permission.
+      Extensions are separate APKs that the app has to open (sourceDir) and load. AniVerse-native
+      extensions declare the action below, but Aniyomi-format extensions declare nothing at all,
+      so the broad package visibility is the only way to see them.
     -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+
     <queries>
         <intent>
             <action android:name="app.aniverse.source.api.EXTENSION" />

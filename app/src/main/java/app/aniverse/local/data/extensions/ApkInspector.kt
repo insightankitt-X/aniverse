@@ -7,6 +7,8 @@ import android.content.pm.PackageManager
 import android.os.Build
 import app.aniverse.source.api.EXTENSION_API_VERSION
 import app.aniverse.source.api.EXTENSION_META_PATH
+import app.aniverse.source.runtime.ExtensionFormat
+import app.aniverse.source.runtime.ExtensionFormats
 import app.aniverse.source.runtime.ExtensionMeta
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.serialization.json.Json
@@ -56,6 +58,9 @@ class ApkInspector @Inject constructor(
 
     fun extensionApiVersion(file: File): Int? = runCatching { apiVersionIn(file) }.getOrNull()
 
+    /** Which extension contract the APK follows; unsupported files are rejected before install. */
+    fun formatOf(file: File): ExtensionFormat = ExtensionFormats.inspect(context, file)
+
     fun installedVersionCode(pkg: String): Long = runCatching {
         val info = context.packageManager.getPackageInfo(pkg, 0)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) info.longVersionCode else {
@@ -77,11 +82,20 @@ class ApkInspector @Inject constructor(
     /** Permissions an extension should never need for fetching and playing media. */
     fun unusualPermissions(permissions: List<String>): List<String> = permissions.filter { it !in ALLOWED_PERMISSIONS }
 
-    private fun apiVersionIn(file: File): Int = ZipFile(file).use { zip ->
-        val entry = zip.getEntry(EXTENSION_META_PATH) ?: return@use EXTENSION_API_VERSION
-        val text = zip.getInputStream(entry).bufferedReader().use { it.readText() }
-        runCatching { json.decodeFromString(ExtensionMeta.serializer(), text).apiVersion }
-            .getOrDefault(EXTENSION_API_VERSION)
+    /**
+     * 0 means "not a usable extension". Foreign Aniyomi APKs are hosted through the compatibility
+     * layer and therefore report the current API version; anything unknown is rejected instead of
+     * being installed and only failing when the host tries to load it.
+     */
+    private fun apiVersionIn(file: File): Int = when (formatOf(file)) {
+        is ExtensionFormat.Unsupported -> 0
+        is ExtensionFormat.Aniyomi -> EXTENSION_API_VERSION
+        is ExtensionFormat.AniVerse -> ZipFile(file).use { zip ->
+            val entry = zip.getEntry(EXTENSION_META_PATH) ?: return@use EXTENSION_API_VERSION
+            val text = zip.getInputStream(entry).bufferedReader().use { it.readText() }
+            runCatching { json.decodeFromString(ExtensionMeta.serializer(), text).apiVersion }
+                .getOrDefault(EXTENSION_API_VERSION)
+        }
     }
 
     private fun signatureOf(info: PackageInfo): String? {

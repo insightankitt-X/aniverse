@@ -7,6 +7,18 @@
 -keep class app.aniverse.source.runtime.ExtensionHost { *; }
 -keep class app.aniverse.source.runtime.ExtensionProvider { *; }
 
+# Aniyomi-format extensions link against these host classes at runtime; they are only reachable
+# from third-party bytecode, so R8 must not strip or rename a single member.
+-keep class eu.kanade.tachiyomi.** { *; }
+-keep interface eu.kanade.tachiyomi.** { *; }
+-keep class keiyoushi.** { *; }
+-keep interface keiyoushi.** { *; }
+-keep class uy.kohesive.injekt.** { *; }
+-keep interface uy.kohesive.injekt.** { *; }
+-dontwarn org.jsoup.**
+-dontwarn fi.iki.elonen.**
+-dontwarn app.cash.quickjs.**
+
 # Room generates implementations by name.
 -keep class * extends androidx.room.RoomDatabase
 -keep @androidx.room.Entity class *

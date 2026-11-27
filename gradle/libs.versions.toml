@@ -26,6 +26,11 @@ androidxTestCore = "1.6.1"
 androidxTestRunner = "1.6.2"
 androidxTestJunit = "1.2.1"
 espresso = "3.6.1"
+jsoup = "1.18.1"
+nanohttpd = "2.3.1"
+quickjs = "0.9.2"
+injekt = "4135455a2a"
+androidxPreference = "1.2.1"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
@@ -77,6 +82,13 @@ androidx-test-core = { module = "androidx.test:core", version.ref = "androidxTes
 androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidxTestRunner" }
 androidx-test-ext-junit = { module = "androidx.test.ext:junit", version.ref = "androidxTestJunit" }
 espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "espresso" }
+
+# Host runtime for Aniyomi-format extensions (the API their APKs compile against).
+jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
+nanohttpd = { module = "org.nanohttpd:nanohttpd", version.ref = "nanohttpd" }
+quickjs = { module = "app.cash.quickjs:quickjs-android", version.ref = "quickjs" }
+injekt-core = { module = "com.github.null2264.injekt:injekt-core", version.ref = "injekt" }
+androidx-preference = { module = "androidx.preference:preference", version.ref = "androidxPreference" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

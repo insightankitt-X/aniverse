@@ -3,6 +3,8 @@ package app.aniverse.local
 import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import coil.ImageLoader
+import coil.ImageLoaderFactory
 import app.aniverse.local.domain.repository.DownloadRepository
 import app.aniverse.local.domain.repository.SettingsRepository
 import app.aniverse.local.work.WorkScheduler
@@ -14,7 +16,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltAndroidApp
-class AniVerseApp : Application(), Configuration.Provider {
+class AniVerseApp : Application(), Configuration.Provider, ImageLoaderFactory {
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
 
@@ -33,6 +35,11 @@ class AniVerseApp : Application(), Configuration.Provider {
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
             .build()
+
+    /** Posters fade in instead of popping in, which makes scrolling lists feel much calmer. */
+    override fun newImageLoader(): ImageLoader = ImageLoader.Builder(this)
+        .crossfade(true)
+        .build()
 
     override fun onCreate() {
         super.onCreate()

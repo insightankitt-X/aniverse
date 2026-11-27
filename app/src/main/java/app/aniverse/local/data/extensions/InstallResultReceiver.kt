@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
+import androidx.core.content.IntentCompat
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -18,6 +19,36 @@ class InstallResultReceiver : BroadcastReceiver() {
         if (sessionId < 0) return
         val statusCode = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
         val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
+
+        if (statusCode == PackageInstaller.STATUS_PENDING_USER_ACTION) {
+            // A regular app is not a privileged installer, so Android hands the confirmation back
+            // to us instead of installing silently. Launch it and keep waiting for the real result
+            // that arrives after the user has confirmed or cancelled.
+            val confirmation = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_INTENT, Intent::class.java)
+            if (confirmation == null) {
+                registry.complete(
+                    sessionId,
+                    InstallSignal(
+                        PackageInstaller.STATUS_FAILURE,
+                        "The system did not provide an install confirmation dialog",
+                    ),
+                )
+                return
+            }
+            confirmation.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            val launched = runCatching { context.startActivity(confirmation) }.isSuccess
+            if (!launched) {
+                registry.complete(
+                    sessionId,
+                    InstallSignal(
+                        PackageInstaller.STATUS_FAILURE,
+                        "The install dialog could not be opened. Allow AniVerse to install unknown apps and try again.",
+                    ),
+                )
+            }
+            return
+        }
+
         registry.complete(sessionId, InstallSignal(statusCode, message))
     }
 

@@ -1,6 +1,12 @@
 package app.aniverse.local.ui.nav
 
 import android.net.Uri
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
@@ -53,6 +59,7 @@ import app.aniverse.local.ui.screens.repositories.RepositoriesScreen
 import app.aniverse.local.ui.screens.search.SearchScreen
 import app.aniverse.local.ui.screens.settings.SettingsScreen
 import app.aniverse.local.ui.screens.updates.UpdatesScreen
+import app.aniverse.local.ui.theme.LocalReduceMotion
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -153,6 +160,7 @@ fun AniVerseNav(
     badgesViewModel: NavBadgesViewModel = hiltViewModel(),
 ) {
     val badges by badgesViewModel.badges.collectAsStateWithLifecycle()
+    val reduceMotion = LocalReduceMotion.current
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val showBar = tabs.any { it.route == currentRoute }
@@ -196,6 +204,40 @@ fun AniVerseNav(
             navController = navController,
             startDestination = Routes.HOME,
             modifier = Modifier.padding(padding),
+            enterTransition = {
+                when {
+                    reduceMotion -> EnterTransition.None
+                    isTabRoute(initialState.destination.route) && isTabRoute(targetState.destination.route) ->
+                        fadeIn(tween(180))
+                    else -> fadeIn(tween(200)) + slideIntoContainer(
+                        towards = AnimatedContentTransitionScope.SlideDirection.Start,
+                        animationSpec = tween(280),
+                        initialOffset = { it / 10 },
+                    )
+                }
+            },
+            exitTransition = {
+                when {
+                    reduceMotion -> ExitTransition.None
+                    isTabRoute(initialState.destination.route) && isTabRoute(targetState.destination.route) ->
+                        fadeOut(tween(140))
+                    else -> fadeOut(tween(160))
+                }
+            },
+            popEnterTransition = {
+                if (reduceMotion) {
+                    EnterTransition.None
+                } else {
+                    fadeIn(tween(200)) + slideIntoContainer(
+                        towards = AnimatedContentTransitionScope.SlideDirection.End,
+                        animationSpec = tween(280),
+                        initialOffset = { it / 10 },
+                    )
+                }
+            },
+            popExitTransition = {
+                if (reduceMotion) ExitTransition.None else fadeOut(tween(160))
+            },
         ) {
             composable(Routes.HOME) {
                 HomeScreen(
@@ -308,6 +350,8 @@ fun AniVerseNav(
         }
     }
 }
+
+private fun isTabRoute(route: String?): Boolean = tabs.any { it.route == route }
 
 @Composable
 private fun TryReconnectHint() {

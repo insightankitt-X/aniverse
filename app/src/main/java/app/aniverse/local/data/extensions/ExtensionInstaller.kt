@@ -8,8 +8,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
 import app.aniverse.local.data.network.RepoApi
+import app.aniverse.local.data.network.RepoUrlResolver
 import app.aniverse.local.domain.repository.InstallFailure
 import app.aniverse.source.api.EXTENSION_API_VERSION
+import app.aniverse.source.runtime.ExtensionFormat
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -57,9 +59,20 @@ class ExtensionInstaller @Inject constructor(
         val part = File(dir, "$pkg.part")
         val target = File(dir, "$pkg.apk")
         val resumeFrom = if (part.exists()) part.length() else 0L
+        var effectiveResume = resumeFrom
 
         try {
-            val response = api.fetchApk(apkUrl, if (resumeFrom > 0L) "bytes=$resumeFrom-" else null)
+            var response = api.fetchApk(apkUrl, if (effectiveResume > 0L) "bytes=$effectiveResume-" else null)
+            // Repositories disagree about where APKs live: the index usually lists a bare file
+            // name while the file sits in an `apk/` folder (or the other way round). Retry the
+            // other layout once instead of failing the install with a bare 404.
+            val alternate = RepoUrlResolver.alternateFileLayout(apkUrl)
+            if (!response.isSuccessful && response.code() in RETRYABLE_CODES && alternate != null) {
+                runCatching { response.errorBody()?.close() }
+                part.delete()
+                effectiveResume = 0L
+                response = api.fetchApk(alternate, null)
+            }
             if (!response.isSuccessful) {
                 return@withContext DownloadOutcome.Failed(
                     InstallFailure.DOWNLOAD_FAILED,
@@ -69,8 +82,8 @@ class ExtensionInstaller @Inject constructor(
             val body: ResponseBody = response.body()
                 ?: return@withContext DownloadOutcome.Failed(InstallFailure.DOWNLOAD_FAILED, "The download was empty")
 
-            val appending = response.code() == 206 && resumeFrom > 0L
-            val alreadyThere = if (appending) resumeFrom else 0L
+            val appending = response.code() == 206 && effectiveResume > 0L
+            val alreadyThere = if (appending) effectiveResume else 0L
             body.use { stream ->
                 FileOutputStream(part, appending).use { output ->
                     val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
@@ -96,6 +109,10 @@ class ExtensionInstaller @Inject constructor(
             }
             val info = inspector.inspect(target)
                 ?: return@withContext DownloadOutcome.Failed(InstallFailure.CORRUPT_APK, "This file is not a valid APK")
+            val format = inspector.formatOf(target)
+            if (format is ExtensionFormat.Unsupported) {
+                return@withContext DownloadOutcome.Failed(InstallFailure.INCOMPATIBLE_API, format.reason)
+            }
             if (info.pkg != pkg) {
                 return@withContext DownloadOutcome.Failed(
                     InstallFailure.PACKAGE_MISMATCH,
@@ -207,5 +224,6 @@ class ExtensionInstaller @Inject constructor(
 
     private companion object {
         const val INSTALL_TIMEOUT_MS = 3 * 60 * 1000L
+        val RETRYABLE_CODES = setOf(403, 404, 410)
     }
 }

@@ -45,11 +45,14 @@ object VersionComparator : Comparator<String> {
         else -> isNewer(newVersionName, installedVersionName)
     }
 
+    // Digits and words are separate tokens so `beta2` sorts below `beta10`.
+    private val TOKEN = Regex("[0-9]+|[a-z]+")
+
     private fun tokenize(version: String): List<String> =
-        version.trim()
-            .removePrefix("v")
-            .removePrefix("V")
-            .split('.', '-', '_', '+')
-            .filter { it.isNotEmpty() }
-            .map { it.lowercase() }
+        TOKEN.findAll(
+            version.trim()
+                .removePrefix("v")
+                .removePrefix("V")
+                .lowercase(),
+        ).map { it.value }.toList()
 }

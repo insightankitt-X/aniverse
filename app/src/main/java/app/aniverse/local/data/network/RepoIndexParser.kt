@@ -24,6 +24,8 @@ class RepoIndexParser(private val json: Json = DEFAULT_JSON) {
             is JsonObject -> root["extensions"] as? JsonArray ?: return null
             else -> return null
         }
+        // A bare array of scalars (`[1,2,3]`) is somebody else's payload, not an extension index.
+        if (array.isNotEmpty() && array.none { it is JsonObject }) return null
 
         val entries = array.mapNotNull { element ->
             val dto = runCatching {
@@ -42,13 +44,20 @@ class RepoIndexParser(private val json: Json = DEFAULT_JSON) {
         val apk = dto.apk?.trim().orEmpty()
         if (pkg.isEmpty() || apk.isEmpty()) return null
 
-        val apkUrl = RepoUrlResolver.resolveFile(indexUrl, apk) ?: return null
+        val apkUrl = RepoUrlResolver.resolveFile(indexUrl, apk, bareFolder = APK_FOLDER) ?: return null
         // Repository indexes are https-only, so their relative APK links must stay https as well.
         // An http index is only accepted by the local integration test harness.
         val requireHttps = indexUrl.startsWith("https://", ignoreCase = true)
         if (requireHttps && !apkUrl.startsWith("https://", ignoreCase = true)) return null
 
         val icon = dto.icon?.trim().orEmpty()
+        // Aniyomi repositories do not put icon paths in the index; they publish
+        // `icon/<package>.png` next to it, so build that URL instead of showing a letter tile.
+        val iconUrl = if (icon.isEmpty()) {
+            RepoUrlResolver.resolveFile(indexUrl, "$pkg.png", bareFolder = ICON_FOLDER)
+        } else {
+            RepoUrlResolver.resolveFile(indexUrl, icon, bareFolder = ICON_FOLDER)
+        }
         return ParsedExtension(
             pkg = pkg,
             name = dto.name?.trim()?.takeIf { it.isNotEmpty() } ?: pkg,
@@ -56,13 +65,16 @@ class RepoIndexParser(private val json: Json = DEFAULT_JSON) {
             versionCode = dto.code ?: 0,
             lang = dto.lang?.trim()?.takeIf { it.isNotEmpty() } ?: "en",
             nsfw = (dto.nsfw ?: 0) != 0,
-            iconUrl = if (icon.isEmpty()) null else RepoUrlResolver.resolveFile(indexUrl, icon),
+            iconUrl = iconUrl,
             description = dto.description?.trim()?.takeIf { it.isNotEmpty() },
             apkUrl = apkUrl,
         )
     }
 
     companion object {
+        private const val APK_FOLDER = "apk"
+        private const val ICON_FOLDER = "icon"
+
         val DEFAULT_JSON = Json {
             ignoreUnknownKeys = true
             isLenient = true

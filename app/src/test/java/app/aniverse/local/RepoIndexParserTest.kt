@@ -1,6 +1,7 @@
 package app.aniverse.local
 
 import app.aniverse.local.data.network.RepoIndexParser
+import app.aniverse.local.data.network.RepoUrlResolver
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -37,7 +38,18 @@ class RepoIndexParserTest {
         val body = """{"extensions":[{"pkg":"a.b","name":"A","version":"1.0","code":1,"apk":"a.apk","nsfw":1}]}"""
         val extension = parser.parse(body, indexUrl)!!.extensions.single()
         assertTrue(extension.nsfw)
-        assertEquals("https://raw.githubusercontent.com/example/repo/main/a.apk", extension.apkUrl)
+        // Bare file names live in the repository's `apk/` folder, as every Aniyomi repo publishes them.
+        assertEquals("https://raw.githubusercontent.com/example/repo/main/apk/a.apk", extension.apkUrl)
+        // Missing `icon` entries fall back to the conventional `icon/<pkg>.png`.
+        assertEquals("https://raw.githubusercontent.com/example/repo/main/icon/a.b.png", extension.iconUrl)
+    }
+
+    @Test
+    fun explicitIconPathsAreResolvedAgainstTheIndexFolder() {
+        val body = """[{"pkg":"a.b","name":"A","version":"1.0","code":1,"apk":"apk/a.apk","icon":"icon/custom.png"}]"""
+        val extension = parser.parse(body, indexUrl)!!.extensions.single()
+        assertEquals("https://raw.githubusercontent.com/example/repo/main/apk/a.apk", extension.apkUrl)
+        assertEquals("https://raw.githubusercontent.com/example/repo/main/icon/custom.png", extension.iconUrl)
     }
 
     @Test
@@ -68,6 +80,19 @@ class RepoIndexParserTest {
         val index = parser.parse(body, indexUrl)!!
         assertEquals(1, index.extensions.size)
         assertEquals("First", index.extensions.single().name)
+    }
+
+    @Test
+    fun alternateLayoutSwapsTheApkFolder() {
+        assertEquals(
+            "https://raw.githubusercontent.com/example/repo/main/a.apk",
+            RepoUrlResolver.alternateFileLayout("https://raw.githubusercontent.com/example/repo/main/apk/a.apk"),
+        )
+        assertEquals(
+            "https://raw.githubusercontent.com/example/repo/main/apk/a.apk",
+            RepoUrlResolver.alternateFileLayout("https://raw.githubusercontent.com/example/repo/main/a.apk"),
+        )
+        assertNull(RepoUrlResolver.alternateFileLayout("https://example.com"))
     }
 
     @Test

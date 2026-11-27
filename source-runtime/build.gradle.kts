@@ -24,6 +24,8 @@ android {
 
 dependencies {
     api(project(":source-api"))
+    // Aniyomi-format extensions resolve their API classes from the host class loader.
+    api(project(":aniyomi-api"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)

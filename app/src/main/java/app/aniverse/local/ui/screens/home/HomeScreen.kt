@@ -55,6 +55,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import javax.inject.Inject
 
 @HiltViewModel
@@ -88,6 +90,10 @@ class HomeViewModel @Inject constructor(
     val state = _state.asStateFlow()
 
     private val rowCache = mutableMapOf<Long, Pair<Long, List<Series>>>()
+
+    // Each row is an extension call; starting dozens at once saturates the extension process and
+    // makes the whole device stutter. Load a few at a time instead.
+    private val loadPermits = Semaphore(MAX_PARALLEL_ROWS)
 
     init {
         viewModelScope.launch {
@@ -144,7 +150,9 @@ class HomeViewModel @Inject constructor(
             })
         }
         supervisorScope {
-            sources.forEach { ref -> launch { loadRow(ref, force) } }
+            sources.forEach { ref ->
+                launch { loadPermits.withPermit { loadRow(ref, force) } }
+            }
         }
     }
 
@@ -177,6 +185,7 @@ class HomeViewModel @Inject constructor(
 
     private companion object {
         const val CACHE_TTL_MS = 15 * 60 * 1000L
+        const val MAX_PARALLEL_ROWS = 3
     }
 }
 

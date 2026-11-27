@@ -1,11 +1,9 @@
 package app.aniverse.local.data.extensions
 
-import android.content.pm.PackageInfo
-import java.io.FileOutputStream
-
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInfo
 import android.content.pm.PackageInstaller
 import app.aniverse.local.data.network.RepoApi
 import app.aniverse.local.data.network.RepoUrlResolver
@@ -19,6 +17,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.ResponseBody
 import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -39,7 +38,12 @@ class ExtensionInstaller @Inject constructor(
 
         data object Cancelled : DownloadOutcome
 
-        data class Failed(val reason: InstallFailure, val message: String) : DownloadOutcome
+        data class Failed(
+            val reason: InstallFailure,
+            val message: String,
+            /** True when the bytes were continued from an earlier partial download. */
+            val resumed: Boolean = false,
+        ) : DownloadOutcome
     }
 
     sealed interface InstallOutcomeInternal {
@@ -55,11 +59,33 @@ class ExtensionInstaller @Inject constructor(
         pkg: String,
         onProgress: (Float) -> Unit,
     ): DownloadOutcome = withContext(Dispatchers.IO) {
+        val first = downloadOnce(apkUrl, pkg, onProgress, allowResume = true)
+        // A file stitched together from an old partial download can fail APK inspection even
+        // though the server is fine. Start over once with a clean file before blaming the APK.
+        if (first is DownloadOutcome.Failed &&
+            first.reason == InstallFailure.CORRUPT_APK &&
+            first.resumed
+        ) {
+            downloadOnce(apkUrl, pkg, onProgress, allowResume = false)
+        } else {
+            first
+        }
+    }
+
+    private suspend fun downloadOnce(
+        apkUrl: String,
+        pkg: String,
+        onProgress: (Float) -> Unit,
+        allowResume: Boolean,
+    ): DownloadOutcome {
         val dir = File(context.cacheDir, "extensions").apply { mkdirs() }
-        val part = File(dir, "$pkg.part")
+        // Partial files are keyed by URL so an index that moved to a different APK layout can
+        // never append new bytes to a file downloaded from another URL.
+        val part = File(dir, "$pkg-${Integer.toHexString(apkUrl.hashCode())}.part")
         val target = File(dir, "$pkg.apk")
-        val resumeFrom = if (part.exists()) part.length() else 0L
+        val resumeFrom = if (allowResume && part.exists()) part.length() else 0L
         var effectiveResume = resumeFrom
+        var resumed = resumeFrom > 0L
 
         try {
             var response = api.fetchApk(apkUrl, if (effectiveResume > 0L) "bytes=$effectiveResume-" else null)
@@ -71,70 +97,89 @@ class ExtensionInstaller @Inject constructor(
                 runCatching { response.errorBody()?.close() }
                 part.delete()
                 effectiveResume = 0L
+                resumed = false
                 response = api.fetchApk(alternate, null)
             }
             if (!response.isSuccessful) {
-                return@withContext DownloadOutcome.Failed(
+                return DownloadOutcome.Failed(
                     InstallFailure.DOWNLOAD_FAILED,
                     "The extension download failed (HTTP ${response.code()})",
+                    resumed,
                 )
             }
             val body: ResponseBody = response.body()
-                ?: return@withContext DownloadOutcome.Failed(InstallFailure.DOWNLOAD_FAILED, "The download was empty")
+                ?: return DownloadOutcome.Failed(InstallFailure.DOWNLOAD_FAILED, "The download was empty", resumed)
 
             val appending = response.code() == 206 && effectiveResume > 0L
+            resumed = appending
             val alreadyThere = if (appending) effectiveResume else 0L
             body.use { stream ->
                 FileOutputStream(part, appending).use { output ->
                     val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
                     var written = alreadyThere
                     val total = stream.contentLength().let { if (it > 0) it + alreadyThere else -1L }
+                    var lastFraction = -1f
+                    var lastEmitAt = 0L
                     stream.byteStream().use { input ->
                         while (true) {
                             val read = input.read(buffer)
                             if (read <= 0) break
                             output.write(buffer, 0, read)
                             written += read
-                            onProgress(if (total > 0) (written.toFloat() / total.toFloat()).coerceIn(0f, 1f) else 0f)
+                            val fraction = if (total > 0) {
+                                (written.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+                            } else {
+                                0f
+                            }
+                            // Updating UI state for every 8 KiB chunk makes the whole screen
+                            // recompose hundreds of times a second and the app feel frozen.
+                            val now = System.currentTimeMillis()
+                            if (now - lastEmitAt >= PROGRESS_INTERVAL_MS && fraction != lastFraction) {
+                                lastFraction = fraction
+                                lastEmitAt = now
+                                onProgress(fraction)
+                            }
                         }
                     }
                 }
             }
             if (part.length() <= 0L) {
-                return@withContext DownloadOutcome.Failed(InstallFailure.CORRUPT_APK, "The downloaded file was empty")
+                return DownloadOutcome.Failed(InstallFailure.CORRUPT_APK, "The downloaded file was empty", resumed)
             }
             if (target.exists()) target.delete()
             if (!part.renameTo(target)) {
-                return@withContext DownloadOutcome.Failed(InstallFailure.CORRUPT_APK, "The download could not be saved")
+                return DownloadOutcome.Failed(InstallFailure.CORRUPT_APK, "The download could not be saved", resumed)
             }
             val info = inspector.inspect(target)
-                ?: return@withContext DownloadOutcome.Failed(InstallFailure.CORRUPT_APK, "This file is not a valid APK")
+                ?: return DownloadOutcome.Failed(InstallFailure.CORRUPT_APK, "This file is not a valid APK", resumed)
             val format = inspector.formatOf(target)
             if (format is ExtensionFormat.Unsupported) {
-                return@withContext DownloadOutcome.Failed(InstallFailure.INCOMPATIBLE_API, format.reason)
+                return DownloadOutcome.Failed(InstallFailure.INCOMPATIBLE_API, format.reason, resumed)
             }
             if (info.pkg != pkg) {
-                return@withContext DownloadOutcome.Failed(
+                return DownloadOutcome.Failed(
                     InstallFailure.PACKAGE_MISMATCH,
                     "The index says this file is $pkg but the APK is ${info.pkg}",
+                    resumed,
                 )
             }
             if (info.apiVersion != EXTENSION_API_VERSION) {
-                return@withContext DownloadOutcome.Failed(
+                return DownloadOutcome.Failed(
                     InstallFailure.INCOMPATIBLE_API,
                     "This extension targets API v${info.apiVersion}, but this app supports API v$EXTENSION_API_VERSION",
+                    resumed,
                 )
             }
             onProgress(1f)
-            DownloadOutcome.Ready(target, info)
+            return DownloadOutcome.Ready(target, info)
         } catch (e: CancellationException) {
             part.delete()
-            DownloadOutcome.Cancelled
+            return DownloadOutcome.Cancelled
         } catch (e: IOException) {
-            DownloadOutcome.Failed(InstallFailure.DOWNLOAD_FAILED, "The download was interrupted. Try again.")
+            return DownloadOutcome.Failed(InstallFailure.DOWNLOAD_FAILED, "The download was interrupted. Try again.", resumed)
         } catch (e: Exception) {
             part.delete()
-            DownloadOutcome.Failed(InstallFailure.DOWNLOAD_FAILED, "The download failed. Try again.")
+            return DownloadOutcome.Failed(InstallFailure.DOWNLOAD_FAILED, "The download failed. Try again.", resumed)
         }
     }
 
@@ -175,10 +220,13 @@ class ExtensionInstaller @Inject constructor(
             session.commit(pendingIntent.intentSender)
 
             val signal = withTimeoutOrNull(INSTALL_TIMEOUT_MS) { deferred.await() }
-                ?: return@withContext InstallOutcomeInternal.Failed(
+            if (signal == null) {
+                registry.forget(sessionId)
+                return@withContext InstallOutcomeInternal.Failed(
                     InstallFailure.UNKNOWN,
                     "The installer did not report back. Check whether the extension was installed.",
                 )
+            }
             registry.forget(sessionId)
             mapSignal(signal)
         } catch (e: CancellationException) {
@@ -194,6 +242,7 @@ class ExtensionInstaller @Inject constructor(
 
     private fun mapSignal(signal: InstallSignal): InstallOutcomeInternal {
         val message = signal.message.orEmpty()
+        val detail = message.substringAfterLast(':').trim().ifBlank { message }
         return when {
             signal.statusCode == PackageInstaller.STATUS_SUCCESS -> InstallOutcomeInternal.Installed
             signal.statusCode == PackageInstaller.STATUS_FAILURE_ABORTED -> InstallOutcomeInternal.Cancelled
@@ -202,6 +251,7 @@ class ExtensionInstaller @Inject constructor(
                 "This would replace a newer installed version. Uninstall the newer copy first.",
             )
             message.contains("INSTALL_FAILED_UPDATE_INCOMPATIBLE") ||
+                message.contains("INSTALL_FAILED_DUPLICATE_PERMISSION") ||
                 signal.statusCode == PackageInstaller.STATUS_FAILURE_CONFLICT -> InstallOutcomeInternal.Failed(
                 InstallFailure.SIGNATURE_MISMATCH,
                 "An extension with this package name is already installed with a different signature.",
@@ -209,21 +259,42 @@ class ExtensionInstaller @Inject constructor(
             message.contains("INSTALL_FAILED_INVALID_APK") ||
                 signal.statusCode == PackageInstaller.STATUS_FAILURE_INVALID -> InstallOutcomeInternal.Failed(
                 InstallFailure.CORRUPT_APK,
-                "Android rejected the APK as invalid or corrupt.",
+                "Android rejected the APK as invalid or corrupt" + detailSuffix(detail),
+            )
+            signal.statusCode == PackageInstaller.STATUS_FAILURE_STORAGE ||
+                message.contains("INSUFFICIENT_STORAGE") -> InstallOutcomeInternal.Failed(
+                InstallFailure.UNKNOWN,
+                "There is not enough free storage to install this extension.",
+            )
+            message.contains("INSTALL_FAILED_USER_RESTRICTED") -> InstallOutcomeInternal.Failed(
+                InstallFailure.INSTALLER_BLOCKED,
+                "Your device blocked the install. Allow installs from AniVerse in the system settings and try again.",
+            )
+            message.contains("INSTALL_FAILED_VERIFICATION_FAILURE") -> InstallOutcomeInternal.Failed(
+                InstallFailure.INSTALLER_BLOCKED,
+                "Your device's app verification blocked this extension. Allow it in the security settings and try again.",
             )
             signal.statusCode == PackageInstaller.STATUS_FAILURE_BLOCKED -> InstallOutcomeInternal.Failed(
                 InstallFailure.INSTALLER_BLOCKED,
                 "Android blocked the install. Allow AniVerse to install unknown apps.",
             )
+            signal.statusCode == PackageInstaller.STATUS_FAILURE_INCOMPATIBLE -> InstallOutcomeInternal.Failed(
+                InstallFailure.INCOMPATIBLE_API,
+                "This extension is not compatible with this device.",
+            )
             else -> InstallOutcomeInternal.Failed(
                 InstallFailure.UNKNOWN,
-                "The install failed. Nothing was changed on your device.",
+                "The install failed" + detailSuffix(detail).ifBlank { ". The installer reported no reason." },
             )
         }
     }
 
+    private fun detailSuffix(detail: String): String =
+        if (detail.isBlank()) "" else " ($detail)"
+
     private companion object {
         const val INSTALL_TIMEOUT_MS = 3 * 60 * 1000L
+        const val PROGRESS_INTERVAL_MS = 120L
         val RETRYABLE_CODES = setOf(403, 404, 410)
     }
 }

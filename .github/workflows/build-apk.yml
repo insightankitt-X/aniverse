@@ -19,6 +19,19 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
+      # The five static weights are OFL-licensed binaries. Fetch them from the upstream project so
+      # the repository stays source-only; the licence text is committed under docs/licenses.
+      - name: Bundle Plus Jakarta Sans
+        run: |
+          set -euo pipefail
+          mkdir -p app/src/main/res/font
+          base="https://raw.githubusercontent.com/tokotype/PlusJakartaSans/master/fonts/ttf"
+          curl -fsSL "$base/PlusJakartaSans-Regular.ttf" -o app/src/main/res/font/plus_jakarta_sans_regular.ttf
+          curl -fsSL "$base/PlusJakartaSans-Medium.ttf" -o app/src/main/res/font/plus_jakarta_sans_medium.ttf
+          curl -fsSL "$base/PlusJakartaSans-SemiBold.ttf" -o app/src/main/res/font/plus_jakarta_sans_semibold.ttf
+          curl -fsSL "$base/PlusJakartaSans-Bold.ttf" -o app/src/main/res/font/plus_jakarta_sans_bold.ttf
+          curl -fsSL "$base/PlusJakartaSans-ExtraBold.ttf" -o app/src/main/res/font/plus_jakarta_sans_extrabold.ttf
+
       - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
@@ -34,6 +47,9 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
+
+      - name: Verify palette contrast
+        run: gradle :app:testDebugUnitTest --tests "app.aniverse.local.ThemeContrastTest" --console=plain
 
       - name: Build APK
         run: |

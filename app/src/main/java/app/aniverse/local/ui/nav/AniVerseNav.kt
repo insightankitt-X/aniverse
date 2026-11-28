@@ -7,26 +7,15 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.MoreHoriz
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.VideoLibrary
-import androidx.compose.material.icons.filled.Whatshot
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -45,6 +34,9 @@ import app.aniverse.local.domain.repository.DownloadRepository
 import app.aniverse.local.domain.repository.ExtensionRepository
 import app.aniverse.local.domain.repository.HistoryRepository
 import app.aniverse.local.domain.repository.LibraryRepository
+import app.aniverse.local.ui.components.AniBottomBar
+import app.aniverse.local.ui.components.AniTab
+import app.aniverse.local.ui.components.AniTabs
 import app.aniverse.local.ui.screens.browse.BrowseScreen
 import app.aniverse.local.ui.screens.browse.SourceFeedScreen
 import app.aniverse.local.ui.screens.details.DetailsScreen
@@ -57,9 +49,11 @@ import app.aniverse.local.ui.screens.more.MoreScreen
 import app.aniverse.local.ui.screens.player.PlayerScreen
 import app.aniverse.local.ui.screens.repositories.RepositoriesScreen
 import app.aniverse.local.ui.screens.search.SearchScreen
+import app.aniverse.local.ui.screens.settings.AppearanceScreen
 import app.aniverse.local.ui.screens.settings.SettingsScreen
 import app.aniverse.local.ui.screens.updates.UpdatesScreen
 import app.aniverse.local.ui.theme.LocalReduceMotion
+import app.aniverse.local.ui.theme.Motion
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -71,12 +65,13 @@ object Routes {
     const val HOME = "home"
     const val BROWSE = "browse"
     const val LIBRARY = "library"
-    const val UPDATES = "updates"
-    const val MORE = "more"
+    const val UPDATES = "schedule"
+    const val MORE = "profile"
     const val SEARCH = "search"
     const val HISTORY = "history"
     const val DOWNLOADS = "downloads"
     const val SETTINGS = "settings"
+    const val APPEARANCE = "appearance"
     const val EXTENSIONS = "extensions"
     const val REPOSITORIES = "repositories"
     const val SOURCE_FEED = "source/{pkg}/{sourceId}/{name}"
@@ -140,20 +135,6 @@ class NavBadgesViewModel @Inject constructor(
     }
 }
 
-private data class Tab(
-    val route: String,
-    val label: String,
-    val icon: ImageVector,
-)
-
-private val tabs = listOf(
-    Tab(Routes.HOME, "Home", Icons.Default.Home),
-    Tab(Routes.BROWSE, "Browse", Icons.Default.Search),
-    Tab(Routes.LIBRARY, "Library", Icons.Default.VideoLibrary),
-    Tab(Routes.UPDATES, "Updates", Icons.Default.Whatshot),
-    Tab(Routes.MORE, "More", Icons.Default.MoreHoriz),
-)
-
 @Composable
 fun AniVerseNav(
     navController: NavHostController = rememberNavController(),
@@ -163,65 +144,56 @@ fun AniVerseNav(
     val reduceMotion = LocalReduceMotion.current
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
+
+    val tabs = remember(badges) {
+        AniTabs.mapIndexed { index, tab ->
+            when (index) {
+                1 -> tab.copy(badge = badges.newEpisodes)
+                3 -> tab.copy(badge = badges.extensionUpdates + badges.downloads)
+                else -> tab
+            }
+        }
+    }
     val showBar = tabs.any { it.route == currentRoute }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        containerColor = androidx.compose.material3.MaterialTheme.colorScheme.background,
         bottomBar = {
             if (showBar) {
-                NavigationBar {
-                    tabs.forEach { tab ->
-                        val count = when (tab.route) {
-                            Routes.UPDATES -> badges.newEpisodes
-                            Routes.MORE -> badges.extensionUpdates + badges.downloads
-                            else -> 0
-                        }
-                        NavigationBarItem(
-                            selected = currentRoute == tab.route,
-                            onClick = {
-                                if (currentRoute != tab.route) {
-                                    navController.navigate(tab.route) {
-                                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                }
-                            },
-                            icon = {
-                                BadgedBox(badge = {
-                                    if (count > 0) Badge { Text(if (count > 99) "99+" else count.toString()) }
-                                }) {
-                                    Icon(tab.icon, contentDescription = tab.label)
-                                }
-                            },
-                            label = { Text(tab.label) },
-                        )
-                    }
-                }
+                AniBottomBar(
+                    tabs = tabs,
+                    currentRoute = currentRoute,
+                    onSelect = { tab -> navigateTab(navController, currentRoute, tab) },
+                )
             }
         },
     ) { padding ->
         NavHost(
             navController = navController,
             startDestination = Routes.HOME,
-            modifier = Modifier.padding(padding),
+            modifier = Modifier.padding(bottom = padding.calculateBottomPadding()),
             enterTransition = {
                 when {
                     reduceMotion -> EnterTransition.None
                     isTabRoute(initialState.destination.route) && isTabRoute(targetState.destination.route) ->
-                        fadeIn(tween(180))
+                        fadeIn(tween(240)) + scaleIn(
+                            initialScale = 0.985f,
+                            animationSpec = tween(280, easing = Motion.Emphasized),
+                        )
+
                     else -> fadeIn(tween(200)) + slideIntoContainer(
                         towards = AnimatedContentTransitionScope.SlideDirection.Start,
-                        animationSpec = tween(280),
-                        initialOffset = { it / 10 },
+                        animationSpec = tween(320, easing = Motion.Emphasized),
+                        initialOffset = { it / 8 },
                     )
                 }
             },
             exitTransition = {
-                when {
-                    reduceMotion -> ExitTransition.None
-                    isTabRoute(initialState.destination.route) && isTabRoute(targetState.destination.route) ->
-                        fadeOut(tween(140))
-                    else -> fadeOut(tween(160))
+                if (reduceMotion) {
+                    ExitTransition.None
+                } else {
+                    fadeOut(tween(150)) + scaleOut(targetScale = 1.008f, animationSpec = tween(180))
                 }
             },
             popEnterTransition = {
@@ -230,22 +202,47 @@ fun AniVerseNav(
                 } else {
                     fadeIn(tween(200)) + slideIntoContainer(
                         towards = AnimatedContentTransitionScope.SlideDirection.End,
-                        animationSpec = tween(280),
-                        initialOffset = { it / 10 },
+                        animationSpec = tween(300, easing = Motion.Emphasized),
+                        initialOffset = { it / 8 },
                     )
                 }
             },
             popExitTransition = {
-                if (reduceMotion) ExitTransition.None else fadeOut(tween(160))
+                if (reduceMotion) ExitTransition.None else fadeOut(tween(150))
             },
         ) {
             composable(Routes.HOME) {
                 HomeScreen(
                     onOpenSeries = { series -> navController.navigate(Routes.details(series)) },
+                    onOpenSeriesById = { id -> navController.navigate(Routes.details(id)) },
                     onOpenSource = { ref -> navController.navigate(Routes.sourceFeed(ref)) },
                     onOpenSearch = { navController.navigate(Routes.SEARCH) },
+                    onOpenUpdates = { navigateTab(navController, currentRoute, tabs[1]) },
+                    onOpenLibrary = { navigateTab(navController, currentRoute, tabs[2]) },
                     onOpenExtensions = { navController.navigate(Routes.EXTENSIONS) },
                     onPlay = { episodeId -> navController.navigate(Routes.player(episodeId)) },
+                )
+            }
+            composable(Routes.UPDATES) {
+                UpdatesScreen(onOpenSeries = { seriesId -> navController.navigate(Routes.details(seriesId)) })
+            }
+            composable(Routes.LIBRARY) {
+                LibraryScreen(
+                    onOpenDetails = { series -> navController.navigate(Routes.details(series)) },
+                    onBrowse = { navController.navigate(Routes.BROWSE) { launchSingleTop = true } },
+                )
+            }
+            composable(Routes.MORE) {
+                MoreScreen(
+                    onOpenHistory = { navController.navigate(Routes.HISTORY) },
+                    onOpenDownloads = { navController.navigate(Routes.DOWNLOADS) },
+                    onOpenExtensions = { navController.navigate(Routes.EXTENSIONS) },
+                    onOpenRepositories = { navController.navigate(Routes.REPOSITORIES) },
+                    onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+                    onOpenAppearance = { navController.navigate(Routes.APPEARANCE) },
+                    onOpenBrowse = { navController.navigate(Routes.BROWSE) { launchSingleTop = true } },
+                    extensionUpdates = badges.extensionUpdates,
+                    downloadCount = badges.downloads,
                 )
             }
             composable(Routes.BROWSE) {
@@ -255,44 +252,24 @@ fun AniVerseNav(
                     onOpenExtensions = { navController.navigate(Routes.EXTENSIONS) },
                 )
             }
-            composable(Routes.LIBRARY) {
-                LibraryScreen(
-                    onOpenDetails = { series -> navController.navigate(Routes.details(series)) },
-                    onBrowse = { navController.navigate(Routes.BROWSE) { launchSingleTop = true } },
-                )
-            }
-            composable(Routes.UPDATES) {
-                UpdatesScreen(onOpenSeries = { seriesId -> navController.navigate(Routes.details(seriesId)) })
-            }
-            composable(Routes.MORE) {
-                MoreScreen(
-                    onOpenHistory = { navController.navigate(Routes.HISTORY) },
-                    onOpenDownloads = { navController.navigate(Routes.DOWNLOADS) },
-                    onOpenExtensions = { navController.navigate(Routes.EXTENSIONS) },
-                    onOpenRepositories = { navController.navigate(Routes.REPOSITORIES) },
-                    onOpenSettings = { navController.navigate(Routes.SETTINGS) },
-                    extensionUpdates = badges.extensionUpdates,
-                    downloadCount = badges.downloads,
-                )
-            }
             composable(Routes.SEARCH) {
                 SearchScreen(
                     onOpenSeries = { series -> navController.navigate(Routes.details(series)) },
                     onBack = { navController.popBackStack() },
                 )
             }
-            composable(Routes.HISTORY) {
-                HistoryScreen()
-            }
-            composable(Routes.DOWNLOADS) {
-                DownloadsScreen()
-            }
+            composable(Routes.HISTORY) { HistoryScreen() }
+            composable(Routes.DOWNLOADS) { DownloadsScreen() }
             composable(Routes.SETTINGS) {
                 SettingsScreen(
                     onBack = { navController.popBackStack() },
                     onOpenExtensions = { navController.navigate(Routes.EXTENSIONS) },
                     onOpenRepositories = { navController.navigate(Routes.REPOSITORIES) },
+                    onOpenAppearance = { navController.navigate(Routes.APPEARANCE) },
                 )
+            }
+            composable(Routes.APPEARANCE) {
+                AppearanceScreen(onBack = { navController.popBackStack() })
             }
             composable(Routes.EXTENSIONS) {
                 ExtensionsScreen(
@@ -329,6 +306,7 @@ fun AniVerseNav(
             ) {
                 DetailsScreen(
                     onPlay = { episodeId -> navController.navigate(Routes.player(episodeId)) },
+                    onOpenRelated = { related -> navController.navigate(Routes.details(related)) },
                     onBack = { navController.popBackStack() },
                 )
             }
@@ -351,10 +329,13 @@ fun AniVerseNav(
     }
 }
 
-private fun isTabRoute(route: String?): Boolean = tabs.any { it.route == route }
-
-@Composable
-private fun TryReconnectHint() {
-    val context = LocalContext.current
-    Text(context.packageName)
+private fun navigateTab(navController: NavHostController, currentRoute: String?, tab: AniTab) {
+    if (currentRoute == tab.route) return
+    navController.navigate(tab.route) {
+        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+        launchSingleTop = true
+        restoreState = true
+    }
 }
+
+private fun isTabRoute(route: String?): Boolean = AniTabs.any { it.route == route }

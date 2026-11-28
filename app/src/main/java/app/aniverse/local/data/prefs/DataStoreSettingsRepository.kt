@@ -8,12 +8,14 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import app.aniverse.local.domain.model.PlayerQualityMode
 import app.aniverse.local.domain.model.Settings
 import app.aniverse.local.domain.model.SubtitleSize
 import app.aniverse.local.domain.model.ThemeMode
+import app.aniverse.local.domain.model.ThemePalette
 import app.aniverse.local.domain.repository.SettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -41,6 +43,8 @@ class DataStoreSettingsRepository @Inject constructor(
         context.settingsDataStore.edit { prefs ->
             val updated = transform(prefs.toSettings())
             prefs[Keys.THEME] = updated.themeMode.name
+            prefs[Keys.THEME_PALETTE] = updated.themePalette.name
+            if (updated.accentArgb != null) prefs[Keys.ACCENT] = updated.accentArgb else prefs.remove(Keys.ACCENT)
             prefs[Keys.PURE_BLACK] = updated.pureBlack
             prefs[Keys.DYNAMIC_COLOR] = updated.dynamicColor
             prefs[Keys.REDUCE_MOTION] = updated.reduceMotion
@@ -63,6 +67,8 @@ class DataStoreSettingsRepository @Inject constructor(
 
     private fun Preferences.toSettings(): Settings = Settings(
         themeMode = enumValue(this[Keys.THEME], ThemeMode.SYSTEM),
+        themePalette = enumValue(this[Keys.THEME_PALETTE], ThemePalette.CRIMSON),
+        accentArgb = this[Keys.ACCENT],
         pureBlack = this[Keys.PURE_BLACK] ?: false,
         dynamicColor = this[Keys.DYNAMIC_COLOR] ?: true,
         reduceMotion = this[Keys.REDUCE_MOTION] ?: false,
@@ -87,6 +93,8 @@ class DataStoreSettingsRepository @Inject constructor(
 
     private object Keys {
         val THEME = stringPreferencesKey("theme")
+        val THEME_PALETTE = stringPreferencesKey("theme_palette")
+        val ACCENT = longPreferencesKey("accent_argb")
         val PURE_BLACK = booleanPreferencesKey("pure_black")
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         val REDUCE_MOTION = booleanPreferencesKey("reduce_motion")

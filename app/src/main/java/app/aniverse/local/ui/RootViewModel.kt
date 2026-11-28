@@ -12,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -24,7 +25,17 @@ class RootViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
-    val settings = settingsRepository.settings.stateIn(viewModelScope, SharingStarted.Eagerly, Settings())
+    private val settingsFlow = settingsRepository.settings
+
+    val settings = settingsFlow.stateIn(viewModelScope, SharingStarted.Eagerly, Settings())
+
+    /**
+     * False until DataStore has produced its first value. The splash stays up while this is false,
+     * which prevents a frame of the wrong theme on cold start.
+     */
+    val settingsReady = settingsFlow
+        .map { true }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     /** Non-null when the local database could not be opened, which only happens after corruption. */
     private val _databaseError = MutableStateFlow<String?>(null)

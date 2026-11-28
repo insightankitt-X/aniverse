@@ -4,12 +4,14 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -19,7 +21,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.aniverse.local.ui.RootViewModel
 import app.aniverse.local.ui.nav.AniVerseNav
@@ -28,25 +29,28 @@ import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    private val viewModel: RootViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen()
+        val splash = installSplashScreen()
+        // The theme is asynchronous. Keep the system splash until DataStore has answered, so the
+        // first drawn frame already uses the user's palette instead of flashing the default.
+        splash.setKeepOnScreenCondition { !viewModel.settingsReady.value }
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent { AniVerseRoot() }
+        setContent {
+            AniVerseRoot(viewModel)
+        }
     }
 }
 
 @Composable
-private fun AniVerseRoot(viewModel: RootViewModel = hiltViewModel()) {
+private fun AniVerseRoot(viewModel: RootViewModel) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val databaseError by viewModel.databaseError.collectAsStateWithLifecycle()
 
-    AniVerseTheme(
-        themeMode = settings.themeMode,
-        pureBlack = settings.pureBlack,
-        dynamicColor = settings.dynamicColor,
-        reduceMotion = settings.reduceMotion,
-    ) {
+    AniVerseTheme(settings = settings) {
         Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
             if (databaseError != null) {
                 DatabaseRecoveryScreen(
@@ -72,7 +76,7 @@ private fun DatabaseRecoveryScreen(message: String, onRetry: () -> Unit, onReset
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("Local data could not be opened", style = MaterialTheme.typography.titleLarge)
+            Text("Local data could not be opened", style = MaterialTheme.typography.headlineSmall)
             Text(
                 message,
                 style = MaterialTheme.typography.bodySmall,
@@ -85,7 +89,9 @@ private fun DatabaseRecoveryScreen(message: String, onRetry: () -> Unit, onReset
                 style = MaterialTheme.typography.bodyMedium,
             )
             Button(onClick = onRetry, modifier = Modifier.padding(top = 16.dp)) { Text("Try again") }
-            Button(onClick = onReset, modifier = Modifier.padding(top = 8.dp)) { Text("Reset local database") }
+            OutlinedButton(onClick = onReset, modifier = Modifier.padding(top = 8.dp)) {
+                Text("Reset local database")
+            }
         }
     }
 }

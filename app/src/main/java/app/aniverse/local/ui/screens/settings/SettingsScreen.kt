@@ -169,6 +169,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onOpenExtensions: () -> Unit,
     onOpenRepositories: () -> Unit,
+    onOpenAppearance: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
@@ -217,38 +218,7 @@ fun SettingsScreen(
     ) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding)) {
             item { SectionHeader("Appearance", Modifier.padding(horizontal = 16.dp)) }
-            item {
-                ChipRow(
-                    label = "Theme",
-                    options = listOf(ThemeMode.SYSTEM to "System", ThemeMode.LIGHT to "Light", ThemeMode.DARK to "Dark"),
-                    selected = settings.themeMode,
-                    onSelect = { mode -> viewModel.update { it.copy(themeMode = mode) } },
-                )
-            }
-            item {
-                SettingSwitchRow(
-                    title = "Pure black",
-                    subtitle = "Use true black backgrounds in dark mode",
-                    checked = settings.pureBlack,
-                    onCheckedChange = { value -> viewModel.update { it.copy(pureBlack = value) } },
-                )
-            }
-            item {
-                SettingSwitchRow(
-                    title = "Dynamic colour",
-                    subtitle = "Follow the system wallpaper palette (Android 12+)",
-                    checked = settings.dynamicColor,
-                    onCheckedChange = { value -> viewModel.update { it.copy(dynamicColor = value) } },
-                )
-            }
-            item {
-                SettingSwitchRow(
-                    title = "Reduce motion",
-                    subtitle = "Disable shimmering placeholders and long animations",
-                    checked = settings.reduceMotion,
-                    onCheckedChange = { value -> viewModel.update { it.copy(reduceMotion = value) } },
-                )
-            }
+            item { ActionRow("Theme & appearance", "Palette, AMOLED, accent colour and motion", onOpenAppearance) }
 
             item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
             item { SectionHeader("Library", Modifier.padding(horizontal = 16.dp)) }

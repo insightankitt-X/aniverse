@@ -23,3 +23,20 @@ fun formatBytes(bytes: Long): String {
 }
 
 fun formatProgressPercent(fraction: Float): String = "${(fraction.coerceIn(0f, 1f) * 100).toInt()}%"
+
+/** "4h ago" style label used by Home and Schedule. */
+fun formatRelativeTime(timestampMs: Long, now: Long = System.currentTimeMillis()): String {
+    if (timestampMs <= 0L) return ""
+    val minutes = ((now - timestampMs) / 60_000L).coerceAtLeast(0L)
+    return when {
+        minutes < 1L -> "Just now"
+        minutes < 60L -> "${minutes}m ago"
+        minutes < 24L * 60L -> "${minutes / 60L}h ago"
+        minutes < 7L * 24L * 60L -> "${minutes / (24L * 60L)}d ago"
+        else -> java.text.SimpleDateFormat("d MMM", java.util.Locale.getDefault()).format(java.util.Date(timestampMs))
+    }
+}
+
+/** Clock time for the schedule day list. */
+fun formatClock(timestampMs: Long): String =
+    if (timestampMs <= 0L) "" else java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(timestampMs))

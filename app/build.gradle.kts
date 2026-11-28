@@ -35,6 +35,18 @@ android {
                 "proguard-rules.pro",
             )
         }
+
+        // Release-like build for judging performance. It is not debuggable, so Compose runs with
+        // the same code generation and R8 shrinking as a real release, while staying debug-signed
+        // so it can be installed without a private keystore.
+        create("benchmark") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+            isDebuggable = false
+            applicationIdSuffix = ".benchmark"
+            versionNameSuffix = "-benchmark"
+        }
     }
 
     compileOptions {
@@ -45,6 +57,11 @@ android {
     kotlinOptions {
         jvmTarget = "17"
         freeCompilerArgs += listOf("-opt-in=kotlin.RequiresOptIn")
+    }
+
+    composeCompiler {
+        reportsDestination = layout.buildDirectory.dir("compose_compiler")
+        metricsDestination = layout.buildDirectory.dir("compose_compiler")
     }
 
     buildFeatures {
@@ -91,6 +108,9 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.navigation.compose)
+    implementation(libs.androidx.palette)
+    implementation(libs.androidx.profileinstaller)
+    implementation(libs.kotlinx.collections.immutable)
 
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)

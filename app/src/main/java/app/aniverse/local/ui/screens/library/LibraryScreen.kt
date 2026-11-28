@@ -2,6 +2,7 @@ package app.aniverse.local.ui.screens.library
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,46 +16,46 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Checklist
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.ViewList
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.ViewAgenda
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -62,11 +63,24 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import app.aniverse.local.domain.model.Category
+import app.aniverse.local.domain.model.DownloadState
 import app.aniverse.local.domain.model.Series
 import app.aniverse.local.domain.repository.CategoryMembership
+import app.aniverse.local.domain.repository.DownloadRepository
+import app.aniverse.local.domain.repository.HistoryRepository
 import app.aniverse.local.domain.repository.LibraryRepository
+import app.aniverse.local.ui.components.AniBottomSheet
+import app.aniverse.local.ui.components.AniLargeHeader
+import app.aniverse.local.ui.components.AniSheetAction
 import app.aniverse.local.ui.components.EmptyState
+import app.aniverse.local.ui.components.PillButton
+import app.aniverse.local.ui.components.PillStyle
+import app.aniverse.local.ui.components.PillTabRow
 import app.aniverse.local.ui.components.PosterCard
+import app.aniverse.local.ui.components.PosterGrid
+import app.aniverse.local.ui.components.PosterGridSkeleton
+import app.aniverse.local.ui.components.GenreLine
+import androidx.compose.material3.HorizontalDivider
 import coil.compose.AsyncImage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -76,11 +90,16 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 enum class LibrarySort { TITLE, ADDED, UPDATED }
+enum class SmartFilter { WATCHING, DOWNLOADED }
+
+internal data class Segment(val label: String, val categoryId: Long?, val smart: SmartFilter?)
 
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
     membership: CategoryMembership,
+    downloadRepository: DownloadRepository,
+    historyRepository: HistoryRepository,
 ) : ViewModel() {
 
     data class State(
@@ -89,6 +108,9 @@ class LibraryViewModel @Inject constructor(
         val categories: List<Category> = emptyList(),
         val members: Map<Long, Set<Long>> = emptyMap(),
         val selectedCategory: Long? = null,
+        val smart: SmartFilter? = null,
+        val watchingIds: Set<Long> = emptySet(),
+        val downloadedIds: Set<Long> = emptySet(),
         val query: String = "",
         val sort: LibrarySort = LibrarySort.TITLE,
         val grid: Boolean = true,
@@ -99,8 +121,12 @@ class LibraryViewModel @Inject constructor(
     ) {
         val visible: List<Series>
             get() {
-                val categoryMembers = selectedCategory?.let { members[it] }
-                val base = if (categoryMembers == null) all else all.filter { it.id in categoryMembers }
+                val base = when {
+                    smart == SmartFilter.WATCHING -> all.filter { it.id in watchingIds }
+                    smart == SmartFilter.DOWNLOADED -> all.filter { it.id in downloadedIds }
+                    selectedCategory != null -> all.filter { it.id in (members[selectedCategory] ?: emptySet()) }
+                    else -> all
+                }
                 val searched = if (query.isBlank()) base else base.filter { it.title.contains(query, ignoreCase = true) }
                 return when (sort) {
                     LibrarySort.TITLE -> searched.sortedBy { it.title.lowercase() }
@@ -129,9 +155,25 @@ class LibraryViewModel @Inject constructor(
                 _state.update { it.copy(members = members) }
             }
         }
+        viewModelScope.launch {
+            downloadRepository.observeDownloads().collect { groups ->
+                val downloaded = groups.filter { group ->
+                    group.items.any { it.state == DownloadState.COMPLETED }
+                }.map { it.seriesId }.toSet()
+                _state.update { it.copy(downloadedIds = downloaded) }
+            }
+        }
+        viewModelScope.launch {
+            historyRepository.observeContinueWatching().collect { items ->
+                _state.update { it.copy(watchingIds = items.map { item -> item.series.id }.toSet()) }
+            }
+        }
     }
 
-    fun selectCategory(id: Long?) = _state.update { it.copy(selectedCategory = id) }
+    internal fun selectSegment(index: Int, segments: List<Segment>) {
+        val segment = segments.getOrNull(index) ?: return
+        _state.update { it.copy(selectedCategory = segment.categoryId, smart = segment.smart) }
+    }
 
     fun setQuery(query: String) = _state.update { it.copy(query = query) }
 
@@ -159,6 +201,14 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
+    fun remove(series: Series) {
+        viewModelScope.launch { libraryRepository.removeFromLibrary(listOf(series.id)) }
+    }
+
+    fun moveToCategory(series: Series, category: Category) {
+        viewModelScope.launch { libraryRepository.setCategories(series.id, listOf(category.id)) }
+    }
+
     fun openCreate() = _state.update { it.copy(creating = true) }
 
     fun dismissCreate() = _state.update { it.copy(creating = false) }
@@ -166,8 +216,7 @@ class LibraryViewModel @Inject constructor(
     fun createCategory(name: String) {
         viewModelScope.launch {
             runCatching { libraryRepository.createCategory(name) }
-                .onSuccess { _state.update { state -> state.copy(creating = false) } }
-                .onFailure { _state.update { state -> state.copy(creating = false) } }
+            _state.update { state -> state.copy(creating = false) }
         }
     }
 
@@ -200,7 +249,6 @@ class LibraryViewModel @Inject constructor(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryScreen(
     onOpenDetails: (Series) -> Unit,
@@ -208,173 +256,187 @@ fun LibraryScreen(
     viewModel: LibraryViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    var searching by remember { mutableStateOf(false) }
+    // Segment filtering and sorting happen once per state change, not on every recomposition.
+    val visible = remember(state.all, state.smart, state.selectedCategory, state.members, state.query, state.sort) {
+        state.visible
+    }
+    var searching by rememberSaveable { mutableStateOf(false) }
     var sortMenu by remember { mutableStateOf(false) }
     var categoryMenu by remember { mutableStateOf(false) }
+    var actionSheet by remember { mutableStateOf<Series?>(null) }
+    var categorySheet by remember { mutableStateOf<Series?>(null) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    if (searching) {
-                        OutlinedTextField(
-                            value = state.query,
-                            onValueChange = viewModel::setQuery,
-                            singleLine = true,
-                            label = { Text("Search library") },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    } else {
-                        Text(if (state.selectionMode) "${state.selected.size} selected" else "Library")
+    val segments = remember(state.categories, state.watchingIds, state.downloadedIds) {
+        buildList {
+            add(Segment("All", null, null))
+            if (state.watchingIds.isNotEmpty()) add(Segment("Watching", null, SmartFilter.WATCHING))
+            if (state.downloadedIds.isNotEmpty()) add(Segment("Downloaded", null, SmartFilter.DOWNLOADED))
+            state.categories.forEach { add(Segment(it.name, it.id, null)) }
+        }
+    }
+    val selectedIndex = segments.indexOfFirst {
+        it.categoryId == state.selectedCategory && it.smart == state.smart
+    }.coerceAtLeast(0)
+
+    Column(Modifier.fillMaxSize()) {
+        AniLargeHeader(
+            title = if (state.selectionMode) "${state.selected.size} selected" else "My List",
+            subtitle = if (state.selectionMode) "Tap posters to select" else "${state.all.size} series in your library",
+            actions = {
+                if (state.selectionMode) {
+                    IconButton(onClick = viewModel::cancelSelection) {
+                        Icon(Icons.Outlined.Close, contentDescription = "Cancel selection")
                     }
-                },
-                navigationIcon = {
-                    if (state.selectionMode) {
-                        IconButton(onClick = viewModel::cancelSelection) {
-                            Icon(Icons.Default.Close, contentDescription = "Cancel selection")
-                        }
+                } else {
+                    IconButton(onClick = { searching = !searching; if (!searching) viewModel.setQuery("") }) {
+                        Icon(Icons.Outlined.Search, contentDescription = "Search my list")
                     }
-                },
-                actions = {
-                    if (!state.selectionMode) {
-                        IconButton(onClick = { searching = !searching; if (!searching) viewModel.setQuery("") }) {
-                            Icon(if (searching) Icons.Default.Close else Icons.Default.Search, contentDescription = "Search library")
-                        }
-                        IconButton(onClick = viewModel::toggleLayout) {
-                            Icon(if (state.grid) Icons.Default.ViewList else Icons.Default.GridView, contentDescription = "Toggle layout")
-                        }
-                        IconButton(onClick = { viewModel.startSelection() }) {
-                            Icon(Icons.Default.Checklist, contentDescription = "Select series")
-                        }
+                    Box {
                         IconButton(onClick = { sortMenu = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "Sort and categories")
+                            Icon(Icons.Outlined.MoreVert, contentDescription = "More")
                         }
-                    }
-                },
-            )
-        },
-        bottomBar = {
-            if (state.selectionMode) {
-                Surface(tonalElevation = 3.dp) {
-                    Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = viewModel::cancelSelection, modifier = Modifier.weight(1f)) { Text("Cancel") }
-                        Button(onClick = viewModel::removeSelected, enabled = state.selected.isNotEmpty(), modifier = Modifier.weight(1f)) { Text("Remove") }
-                    }
-                }
-            }
-        },
-    ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                item {
-                    FilterChip(selected = state.selectedCategory == null, onClick = { viewModel.selectCategory(null) }, label = { Text("All") })
-                }
-                items(state.categories, key = { it.id }) { category ->
-                    FilterChip(
-                        selected = state.selectedCategory == category.id,
-                        onClick = { viewModel.selectCategory(category.id) },
-                        label = { Text(category.name) },
-                    )
-                }
-                item {
-                    FilterChip(
-                        selected = false,
-                        onClick = viewModel::openCreate,
-                        label = { Text("New") },
-                        leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
-                    )
-                }
-            }
-
-            val visible = state.visible
-            when {
-                state.loading -> EmptyState(title = "Loading", message = "Reading your library")
-                visible.isEmpty() -> EmptyState(
-                    title = "Your library is empty",
-                    message = "Add a series from any source to see it here.",
-                    actionLabel = "Browse",
-                    onAction = onBrowse,
-                )
-                state.grid -> LazyVerticalGrid(
-                    columns = GridCells.Fixed(3),
-                    contentPadding = PaddingValues(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
-                    items(visible, key = { it.id }) { series ->
-                        Box {
-                            PosterCard(
-                                title = series.title,
-                                thumbnailUrl = series.thumbnailUrl,
-                                onClick = {
-                                    if (state.selectionMode) viewModel.toggleSelection(series.id) else onOpenDetails(series)
-                                },
-                                modifier = Modifier.fillMaxWidth(),
+                        DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
+                            DropdownMenuItem(text = { Text("Sort by title") }, onClick = { viewModel.setSort(LibrarySort.TITLE); sortMenu = false })
+                            DropdownMenuItem(text = { Text("Sort by date added") }, onClick = { viewModel.setSort(LibrarySort.ADDED); sortMenu = false })
+                            DropdownMenuItem(text = { Text("Sort by last update") }, onClick = { viewModel.setSort(LibrarySort.UPDATED); sortMenu = false })
+                            DropdownMenuItem(
+                                text = { Text(if (state.grid) "List view" else "Grid view") },
+                                leadingIcon = { Icon(if (state.grid) Icons.Outlined.ViewAgenda else Icons.Outlined.GridView, contentDescription = null) },
+                                onClick = { viewModel.toggleLayout(); sortMenu = false },
                             )
-                            if (state.selectionMode && state.selected.contains(series.id)) {
-                                Icon(
-                                    Icons.Default.CheckCircle,
-                                    contentDescription = "Selected",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
-                                )
-                            }
+                            DropdownMenuItem(text = { Text("Select series") }, onClick = { viewModel.startSelection(); sortMenu = false })
+                            DropdownMenuItem(text = { Text("Manage categories") }, onClick = { sortMenu = false; categoryMenu = true })
+                            DropdownMenuItem(text = { Text("New category") }, leadingIcon = { Icon(Icons.Outlined.Add, contentDescription = null) }, onClick = { sortMenu = false; viewModel.openCreate() })
                         }
                     }
                 }
-                else -> LazyColumn(contentPadding = PaddingValues(16.dp)) {
-                    items(visible, key = { it.id }) { series ->
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    if (state.selectionMode) viewModel.toggleSelection(series.id) else onOpenDetails(series)
-                                }
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Box(
-                                Modifier
-                                    .size(width = 48.dp, height = 72.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                            ) {
-                                if (series.thumbnailUrl != null) {
-                                    AsyncImage(
-                                        model = series.thumbnailUrl,
-                                        contentDescription = null,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize(),
-                                    )
-                                }
-                            }
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(series.title, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                Text(
-                                    series.status.name.lowercase().replaceFirstChar { it.uppercase() },
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            if (state.selected.contains(series.id)) {
-                                Icon(Icons.Default.CheckCircle, contentDescription = "Selected", tint = MaterialTheme.colorScheme.primary)
-                            }
+            },
+        )
+
+        if (searching) {
+            OutlinedTextField(
+                value = state.query,
+                onValueChange = viewModel::setQuery,
+                singleLine = true,
+                placeholder = { Text("Search my list") },
+                leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                shape = RoundedCornerShape(50),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 4.dp),
+            )
+        }
+
+        PillTabRow(
+            options = segments.map { it.label },
+            selectedIndex = selectedIndex,
+            onSelect = { index -> viewModel.selectSegment(index, segments) },
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp),
+        )
+
+        when {
+            state.loading -> PosterGridSkeleton(Modifier.weight(1f))
+            visible.isEmpty() -> EmptyState(
+                modifier = Modifier.weight(1f),
+                title = if (state.all.isEmpty()) "Your list is empty" else "Nothing here yet",
+                message = if (state.all.isEmpty()) {
+                    "Add a series from any installed source and it will appear here."
+                } else {
+                    "This filter has no series. Try another segment or clear the search."
+                },
+                actionLabel = if (state.all.isEmpty()) "Browse sources" else null,
+                onAction = if (state.all.isEmpty()) onBrowse else null,
+            )
+
+            state.grid -> PosterGrid(
+                items = visible,
+                onItem = { series ->
+                    if (state.selectionMode) viewModel.toggleSelection(series.id) else onOpenDetails(series)
+                },
+                onLongItem = { series ->
+                    if (state.selectionMode) viewModel.toggleSelection(series.id) else actionSheet = series
+                },
+                modifier = Modifier.weight(1f),
+            )
+
+            else -> LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp)) {
+                items(visible, key = { it.id }, contentType = { "list" }) { series ->
+                    ListRow(
+                        series = series,
+                        selected = state.selected.contains(series.id),
+                        selectionMode = state.selectionMode,
+                        onClick = {
+                            if (state.selectionMode) viewModel.toggleSelection(series.id) else onOpenDetails(series)
+                        },
+                        onLongClick = { if (!state.selectionMode) actionSheet = series },
+                    )
+                }
+            }
+        }
+
+        if (state.selectionMode) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.background)
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                PillButton("Close", viewModel::cancelSelection, style = PillStyle.Outlined, modifier = Modifier.weight(1f))
+                PillButton(
+                    "Remove",
+                    viewModel::removeSelected,
+                    style = PillStyle.Filled,
+                    enabled = state.selected.isNotEmpty(),
+                    icon = Icons.Outlined.Delete,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+
+    actionSheet?.let { series ->
+        AniBottomSheet(onDismiss = { actionSheet = null }, title = series.title) {
+            AniSheetAction("Open details", { actionSheet = null; onOpenDetails(series) })
+            AniSheetAction("Move to category", { actionSheet = null; categorySheet = series })
+            if (state.categories.isEmpty()) {
+                Text(
+                    "Create a category first from the menu.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+            }
+            AniSheetAction("Remove from My List", { actionSheet = null; viewModel.remove(series) }, destructive = true)
+        }
+    }
+
+    categorySheet?.let { series ->
+        AniBottomSheet(onDismiss = { categorySheet = null }, title = "Move to category") {
+            if (state.categories.isEmpty()) {
+                Text("No categories yet.", style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(12.dp))
+                PillButton("New category", { categorySheet = null; viewModel.openCreate() })
+            } else {
+                state.categories.forEach { category ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.moveToCategory(series, category); categorySheet = null }
+                            .padding(vertical = 13.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Outlined.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(12.dp))
+                        Text(category.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                        if (state.members[category.id]?.contains(series.id) == true) {
+                            Icon(Icons.Outlined.CheckCircle, contentDescription = "In category", tint = MaterialTheme.colorScheme.primary)
                         }
                     }
                 }
             }
         }
-    }
-
-    DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
-        DropdownMenuItem(text = { Text("Sort by title") }, onClick = { viewModel.setSort(LibrarySort.TITLE); sortMenu = false })
-        DropdownMenuItem(text = { Text("Sort by date added") }, onClick = { viewModel.setSort(LibrarySort.ADDED); sortMenu = false })
-        DropdownMenuItem(text = { Text("Sort by last update") }, onClick = { viewModel.setSort(LibrarySort.UPDATED); sortMenu = false })
-        DropdownMenuItem(text = { Text("Manage categories") }, onClick = { sortMenu = false; categoryMenu = true })
     }
 
     if (categoryMenu) {
@@ -386,16 +448,21 @@ fun LibraryScreen(
                     state.categories.forEach { category ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(category.name, modifier = Modifier.weight(1f))
-                            TextButton(onClick = { viewModel.moveCategory(category, -1) }) { Text("Up") }
-                            TextButton(onClick = { viewModel.moveCategory(category, 1) }) { Text("Down") }
-                            TextButton(onClick = { viewModel.openEdit(category) }) { Text("Edit") }
+                            IconButton(onClick = { viewModel.moveCategory(category, -1) }) { Text("↑") }
+                            IconButton(onClick = { viewModel.moveCategory(category, 1) }) { Text("↓") }
+                            IconButton(onClick = { viewModel.openEdit(category) }) {
+                                Icon(Icons.Outlined.Edit, contentDescription = "Rename")
+                            }
                         }
                     }
                     if (state.categories.isEmpty()) Text("No categories yet.")
                 }
             },
-            confirmButton = { Button(onClick = { categoryMenu = false; viewModel.openCreate() }) { Text("New category") } },
+            confirmButton = {
+                Button(onClick = { categoryMenu = false; viewModel.openCreate() }) { Text("New category") }
+            },
             dismissButton = { TextButton(onClick = { categoryMenu = false }) { Text("Close") } },
+            shape = RoundedCornerShape(24.dp),
         )
     }
 
@@ -417,23 +484,72 @@ fun LibraryScreen(
                 Column {
                     OutlinedTextField(value = name, onValueChange = { name = it }, singleLine = true, label = { Text("Name") })
                     Spacer(Modifier.height(8.dp))
-                    Text("Deleting a category leaves its series in your library.", style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = { viewModel.deleteCategory(category); name = "" }) {
+                        Text("Delete category", color = MaterialTheme.colorScheme.error)
+                    }
                 }
             },
-            confirmButton = { Button(onClick = { viewModel.renameCategory(category, name) }, enabled = name.isNotBlank()) { Text("Rename") } },
-            dismissButton = { TextButton(onClick = { viewModel.deleteCategory(category) }) { Text("Delete") } },
+            confirmButton = {
+                Button(onClick = { if (name.isNotBlank()) viewModel.renameCategory(category, name.trim()) }) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = viewModel::dismissEdit) { Text("Cancel") } },
+            shape = RoundedCornerShape(24.dp),
         )
+    }
+}
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun ListRow(
+    series: Series,
+    selected: Boolean,
+    selectionMode: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(vertical = 7.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(width = 54.dp, height = 80.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+        ) {
+            if (series.thumbnailUrl != null) {
+                AsyncImage(
+                    model = series.thumbnailUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(series.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            GenreLine(series.genres.take(3).joinToString(" • ").ifBlank { "From your sources" })
+        }
+        if (selectionMode && selected) {
+            Icon(Icons.Outlined.CheckCircle, contentDescription = "Selected", tint = MaterialTheme.colorScheme.primary)
+        }
     }
 }
 
 @Composable
 private fun NameDialog(title: String, initial: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
-    var value by remember { mutableStateOf(initial) }
+    var name by remember { mutableStateOf(initial) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
-        text = { OutlinedTextField(value = value, onValueChange = { value = it }, singleLine = true, label = { Text("Name") }) },
-        confirmButton = { Button(onClick = { onConfirm(value) }, enabled = value.isNotBlank()) { Text("Save") } },
+        text = { OutlinedTextField(value = name, onValueChange = { name = it }, singleLine = true, label = { Text("Name") }) },
+        confirmButton = { Button(onClick = { if (name.isNotBlank()) onConfirm(name.trim()) }, enabled = name.isNotBlank()) { Text("Create") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        shape = RoundedCornerShape(24.dp),
     )
 }

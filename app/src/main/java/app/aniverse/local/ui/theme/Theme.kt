@@ -1,124 +1,127 @@
 package app.aniverse.local.ui.theme
 
-import android.os.Build
+import android.app.Activity
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Typography
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
+import app.aniverse.local.domain.model.Settings
 import app.aniverse.local.domain.model.ThemeMode
 
-/** True when the system asked for reduced motion; shimmer and long transitions are disabled. */
+/** True when the user asked for reduced motion; shimmer and long transitions are disabled. */
 val LocalReduceMotion = staticCompositionLocalOf { false }
 
-// Hand-picked indigo/violet fallback used when dynamic colour is off or unavailable.
-private val Indigo80 = Color(0xFFC7C4FF)
-private val Indigo40 = Color(0xFF5B54D6)
-private val Violet80 = Color(0xFFE7D6FF)
-private val Violet40 = Color(0xFF7C4DBC)
-private val Ink = Color(0xFF12101A)
-private val InkElevated = Color(0xFF1B1826)
-private val Paper = Color(0xFFFCFAFF)
-
-private val DarkColors = darkColorScheme(
-    primary = Indigo80,
-    onPrimary = Color(0xFF221C6B),
-    primaryContainer = Color(0xFF3A3494),
-    onPrimaryContainer = Color(0xFFE4E0FF),
-    secondary = Violet80,
-    onSecondary = Color(0xFF351B58),
-    secondaryContainer = Color(0xFF4C2B77),
-    onSecondaryContainer = Color(0xFFF1E4FF),
-    background = Ink,
-    onBackground = Color(0xFFE8E4F2),
-    surface = Ink,
-    onSurface = Color(0xFFE8E4F2),
-    surfaceVariant = InkElevated,
-    onSurfaceVariant = Color(0xFFC9C4D8),
-    outline = Color(0xFF8D879E),
-    error = Color(0xFFFFB4AB),
-    onError = Color(0xFF690005),
-)
-
-/** Dark scheme with true black surfaces, used when the user asks for pure black. */
-private val PureBlackColors = darkColorScheme(
-    primary = Indigo80,
-    onPrimary = Color(0xFF221C6B),
-    primaryContainer = Color(0xFF3A3494),
-    onPrimaryContainer = Color(0xFFE4E0FF),
-    secondary = Violet80,
-    onSecondary = Color(0xFF351B58),
-    secondaryContainer = Color(0xFF4C2B77),
-    onSecondaryContainer = Color(0xFFF1E4FF),
-    background = Color.Black,
-    onBackground = Color(0xFFE8E4F2),
-    surface = Color.Black,
-    onSurface = Color(0xFFE8E4F2),
-    surfaceVariant = Color(0xFF121212),
-    onSurfaceVariant = Color(0xFFC9C4D8),
-    outline = Color(0xFF6E6A7B),
-    error = Color(0xFFFFB4AB),
-    onError = Color(0xFF690005),
-)
-
-private val LightColors = lightColorScheme(
-    primary = Indigo40,
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFE4E0FF),
-    onPrimaryContainer = Color(0xFF1A1466),
-    secondary = Violet40,
-    onSecondary = Color.White,
-    secondaryContainer = Color(0xFFF1E4FF),
-    onSecondaryContainer = Color(0xFF2C0F4A),
-    background = Paper,
-    onBackground = Color(0xFF1B1826),
-    surface = Paper,
-    onSurface = Color(0xFF1B1826),
-    surfaceVariant = Color(0xFFECE8F5),
-    onSurfaceVariant = Color(0xFF48445A),
-    error = Color(0xFFBA1A1A),
-)
-
-private val AniVerseTypography = Typography(
-    headlineSmall = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
-    titleLarge = TextStyle(fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold),
-    titleMedium = TextStyle(fontSize = 16.sp, lineHeight = 22.sp, fontWeight = FontWeight.Medium),
-    bodyMedium = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
-    labelLarge = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium),
+val AniShapes = Shapes(
+    extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
+    small = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+    medium = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+    large = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+    extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
 )
 
 @Composable
 fun AniVerseTheme(
-    themeMode: ThemeMode = ThemeMode.SYSTEM,
-    pureBlack: Boolean = false,
-    dynamicColor: Boolean = true,
-    reduceMotion: Boolean = false,
+    settings: Settings = Settings(),
+    applySystemBars: Boolean = true,
     content: @Composable () -> Unit,
 ) {
-    val dark = when (themeMode) {
+    val dark = when (settings.themeMode) {
         ThemeMode.SYSTEM -> isSystemInDarkTheme()
         ThemeMode.LIGHT -> false
         ThemeMode.DARK -> true
     }
-    val context = LocalContext.current
-    val colors = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
-            if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        dark -> if (pureBlack) PureBlackColors else DarkColors
-        else -> LightColors
+    val base = aniverseColorScheme(
+        palette = settings.themePalette,
+        dark = dark,
+        amoled = settings.pureBlack,
+        accentArgb = settings.accentArgb,
+    )
+    val scheme = base.animatedColors(settings.reduceMotion)
+    val extended = AniExtendedColors(
+        hdFill = scheme.primary,
+        hdText = scheme.onPrimary,
+    )
+
+    val view = LocalView.current
+    if (applySystemBars && !view.isInEditMode) {
+        val window = (LocalContext.current as? Activity)?.window
+        SideEffect {
+            if (window != null) {
+                val controller = WindowCompat.getInsetsController(window, view)
+                controller.isAppearanceLightStatusBars = !dark
+                controller.isAppearanceLightNavigationBars = !dark
+            }
+        }
     }
 
-    CompositionLocalProvider(LocalReduceMotion provides reduceMotion) {
-        MaterialTheme(colorScheme = colors, typography = AniVerseTypography, content = content)
+    CompositionLocalProvider(
+        LocalReduceMotion provides settings.reduceMotion,
+        LocalAniDark provides dark,
+        LocalAniExtendedColors provides extended,
+    ) {
+        MaterialTheme(
+            colorScheme = scheme,
+            typography = AniTypography,
+            shapes = AniShapes,
+            content = content,
+        )
     }
 }
+
+/** Colours cross-fade when the palette changes, so the whole app never hard-flips. */
+@Composable
+private fun ColorScheme.animatedColors(reduceMotion: Boolean): ColorScheme {
+    if (reduceMotion) return this
+    val spec = tween<Color>(Motion.EmphasizedMs)
+    @Composable
+    fun color(target: Color, label: String): Color =
+        animateColorAsState(targetValue = target, animationSpec = spec, label = label).value
+
+    return copy(
+        primary = color(primary, "primary"),
+        onPrimary = color(onPrimary, "onPrimary"),
+        primaryContainer = color(primaryContainer, "primaryContainer"),
+        onPrimaryContainer = color(onPrimaryContainer, "onPrimaryContainer"),
+        background = color(background, "background"),
+        onBackground = color(onBackground, "onBackground"),
+        surface = color(surface, "surface"),
+        onSurface = color(onSurface, "onSurface"),
+        surfaceVariant = color(surfaceVariant, "surfaceVariant"),
+        onSurfaceVariant = color(onSurfaceVariant, "onSurfaceVariant"),
+        surfaceContainer = color(surfaceContainer, "surfaceContainer"),
+        outline = color(outline, "outline"),
+    )
+}
+
+/** Preview-only convenience so component previews always render a complete theme. */
+@Composable
+fun AniThemePreview(
+    dark: Boolean = true,
+    palette: app.aniverse.local.domain.model.ThemePalette = app.aniverse.local.domain.model.ThemePalette.CRIMSON,
+    content: @Composable () -> Unit,
+) {
+    AniVerseTheme(
+        settings = Settings(
+            themeMode = if (dark) ThemeMode.DARK else ThemeMode.LIGHT,
+            themePalette = palette,
+        ),
+        applySystemBars = false,
+        content = content,
+    )
+}
+
+/** A neutral light fallback kept for code that only needs a scheme, never a full theme. */
+val AniLightFallbackScheme = lightColorScheme()

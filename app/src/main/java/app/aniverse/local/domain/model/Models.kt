@@ -1,5 +1,7 @@
 package app.aniverse.local.domain.model
 
+import androidx.compose.runtime.Immutable
+
 /** A source an extension exposes, as far as the UI cares. */
 data class SourceRef(
     val pkg: String,
@@ -13,6 +15,7 @@ data class SourceRef(
 
 enum class SeriesStatus { ONGOING, COMPLETED, LICENSED, PUBLISHING_FINISHED, CANCELLED, ON_HIATUS, UNKNOWN }
 
+@Immutable
 data class Series(
     val id: Long = 0L,
     val sourcePkg: String,
@@ -32,6 +35,7 @@ data class Series(
     val key: String get() = "$sourcePkg:$sourceId:$remoteId"
 }
 
+@Immutable
 data class Episode(
     val id: Long = 0L,
     val seriesId: Long,
@@ -50,6 +54,7 @@ data class Episode(
 
 enum class DownloadState { QUEUED, DOWNLOADING, PAUSED, FAILED, COMPLETED, MISSING }
 
+@Immutable
 data class DownloadItem(
     val episodeId: Long,
     val seriesId: Long,
@@ -65,6 +70,7 @@ data class DownloadItem(
     val filePath: String?,
 )
 
+@Immutable
 data class DownloadGroup(
     val seriesId: Long,
     val seriesTitle: String,
@@ -78,6 +84,7 @@ data class StorageSummary(
     val episodeCount: Int,
 )
 
+@Immutable
 data class PlaybackProgress(
     val episodeId: Long,
     val seriesId: Long,
@@ -113,12 +120,14 @@ object PlaybackThresholds {
     fun remainingMs(positionMs: Long, durationMs: Long): Long = (durationMs - positionMs).coerceAtLeast(0L)
 }
 
+@Immutable
 data class ContinueWatchingItem(
     val series: Series,
     val episode: Episode,
     val progress: PlaybackProgress,
 )
 
+@Immutable
 data class HistoryEntry(
     val id: Long,
     val seriesId: Long,
@@ -134,6 +143,7 @@ data class HistoryEntry(
 
 data class HistoryDay(val label: String, val entries: List<HistoryEntry>)
 
+@Immutable
 data class Category(val id: Long, val name: String, val order: Int, val seriesCount: Int = 0)
 
 data class RepoSummary(
@@ -148,6 +158,7 @@ data class RepoSummary(
     val lastError: String? = null,
 )
 
+@Immutable
 data class RepoExtension(
     val pkg: String,
     val name: String,
@@ -160,6 +171,7 @@ data class RepoExtension(
     val apkUrl: String,
 )
 
+@Immutable
 data class InstalledExtension(
     val pkg: String,
     val name: String,
@@ -189,6 +201,7 @@ data class RepoExtensions(
     val extensions: List<RepoExtension>,
 )
 
+@Immutable
 data class UpdateItem(
     val episodeId: Long,
     val seriesId: Long,
@@ -199,18 +212,38 @@ data class UpdateItem(
     val discoveredAt: Long,
 )
 
+@Immutable
 data class UpdateGroup(val seriesId: Long, val seriesTitle: String, val items: List<UpdateItem>)
 
 data class UpdateFailure(val seriesId: Long, val seriesTitle: String, val sourceName: String, val message: String)
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
+/**
+ * Colour palettes for the app. Dynamic follows the wallpaper on Android 12+; it is hidden on
+ * older releases rather than silently falling back to a different-looking theme.
+ */
+enum class ThemePalette {
+    CRIMSON,
+    MIDNIGHT,
+    SAKURA,
+    OCEAN,
+    FOREST,
+    SUNSET,
+    MONOCHROME,
+    DYNAMIC,
+}
+
 enum class PlayerQualityMode { AUTO, MANUAL }
 
 enum class SubtitleSize { SMALL, MEDIUM, LARGE }
 
+@Immutable
 data class Settings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    val themePalette: ThemePalette = ThemePalette.CRIMSON,
+    /** Optional user accent as packed ARGB; null keeps the palette's own accent. */
+    val accentArgb: Long? = null,
     val pureBlack: Boolean = false,
     val dynamicColor: Boolean = true,
     val reduceMotion: Boolean = false,
